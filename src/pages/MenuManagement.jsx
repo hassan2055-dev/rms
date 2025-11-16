@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { Plus, Edit, Trash2, X } from 'lucide-react';
+import MenuItem from '../components/MenuItem';
+import { Plus, Edit, Trash2, X, Grid, List } from 'lucide-react';
 import { menuData as initialMenuData } from '../data/menuData';
 
 const MenuManagement = () => {
   const [menuItems, setMenuItems] = useState(initialMenuData);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [viewMode, setViewMode] = useState('card'); // 'card' or 'table'
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -75,80 +77,133 @@ const MenuManagement = () => {
                   <h2 className="text-2xl font-bold text-neutral-900">Menu Items</h2>
                   <p className="text-neutral-600 text-sm mt-1">Manage your restaurant menu</p>
                 </div>
-                <button
-                  onClick={handleAdd}
-                  className="flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-colors"
-                >
-                  <Plus size={18} />
-                  Add Item
-                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-neutral-100 p-1 rounded-lg">
+                    <button
+                      onClick={() => setViewMode('card')}
+                      className={`p-2 rounded transition-colors ${
+                        viewMode === 'card'
+                          ? 'bg-white text-neutral-900 shadow-sm'
+                          : 'text-neutral-600 hover:text-neutral-900'
+                      }`}
+                    >
+                      <Grid size={18} />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('table')}
+                      className={`p-2 rounded transition-colors ${
+                        viewMode === 'table'
+                          ? 'bg-white text-neutral-900 shadow-sm'
+                          : 'text-neutral-600 hover:text-neutral-900'
+                      }`}
+                    >
+                      <List size={18} />
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleAdd}
+                    className="flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-colors"
+                  >
+                    <Plus size={18} />
+                    Add Item
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-neutral-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                      Item Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                      Category
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                      Price
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-neutral-200">
+            {viewMode === 'card' ? (
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {menuItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-neutral-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg flex items-center justify-center text-xl shadow-sm">
-                            🍕
-                          </div>
-                          <div className="font-medium text-neutral-900 text-sm">{item.name}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-neutral-100 text-neutral-700">
-                          {item.category}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-semibold text-neutral-900">${item.price.toFixed(2)}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-neutral-600 text-sm max-w-xs line-clamp-2">{item.description}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEdit(item)}
-                            className="p-2 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <div key={item.id} className="relative group">
+                      <MenuItem
+                        item={item}
+                        showAddButton={false}
+                      />
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="p-1.5 bg-white/90 backdrop-blur-sm text-neutral-600 hover:text-neutral-900 hover:bg-white rounded-lg transition-colors shadow-sm"
+                        >
+                          <Edit size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-1.5 bg-white/90 backdrop-blur-sm text-red-600 hover:text-red-700 hover:bg-white rounded-lg transition-colors shadow-sm"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-neutral-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                        Item Name
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                        Category
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                        Price
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-neutral-200">
+                    {menuItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-neutral-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg flex items-center justify-center text-xl shadow-sm">
+                              🍕
+                            </div>
+                            <div className="font-medium text-neutral-900 text-sm">{item.name}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-neutral-100 text-neutral-700">
+                            {item.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="font-semibold text-neutral-900">${item.price.toFixed(2)}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-neutral-600 text-sm max-w-xs line-clamp-2">{item.description}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleEdit(item)}
+                              className="p-2 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
+                            >
+                              <Edit size={18} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </main>
       </div>

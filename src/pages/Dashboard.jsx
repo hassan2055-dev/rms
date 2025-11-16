@@ -1,16 +1,71 @@
+import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { DollarSign, ShoppingBag, TrendingUp, MessageSquare, ArrowUpRight } from 'lucide-react';
+import { DollarSign, ShoppingBag, TrendingUp, MessageSquare, ArrowUpRight, Star, Trash2 } from 'lucide-react';
 import { ordersData } from '../data/ordersData';
 import { billsData } from '../data/billsData';
 import { feedbackData } from '../data/feedbackData';
 import { menuData } from '../data/menuData';
+import apiService from '../services/apiService';
 
 const Dashboard = () => {
+  const [reviews, setReviews] = useState([]);
+  const [reviewStats, setReviewStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+
+  // Fetch reviews and stats when component mounts
+  useEffect(() => {
+    fetchReviews();
+    fetchReviewStats();
+  }, []);
+
+  const fetchReviews = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getReviews();
+      if (response.success) {
+        setReviews(response.reviews);
+      }
+    } catch (err) {
+      console.error('Failed to fetch reviews:', err);
+      // Fallback to static data if API fails
+      setReviews(feedbackData);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchReviewStats = async () => {
+    try {
+      const response = await apiService.getStats();
+      if (response.success) {
+        setReviewStats(response.stats);
+      }
+    } catch (err) {
+      console.error('Failed to fetch review stats:', err);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId) => {
+    if (window.confirm('Are you sure you want to delete this review?')) {
+      try {
+        const response = await apiService.deleteReview(reviewId);
+        if (response.success) {
+          setReviews(reviews.filter(review => review.id !== reviewId));
+          fetchReviewStats(); // Refresh stats after deletion
+        }
+      } catch (err) {
+        console.error('Failed to delete review:', err);
+        alert('Failed to delete review. Please try again.');
+      }
+    }
+  };
+
   // Calculate statistics
   const totalSales = billsData.reduce((sum, bill) => sum + bill.total, 0);
   const totalOrders = ordersData.length;
-  const totalFeedback = feedbackData.length;
+  const totalFeedback = reviews.length;
   
   // Find top selling item
   const topItem = menuData.reduce((max, item) => 
@@ -55,7 +110,7 @@ const Dashboard = () => {
       bgColor: 'bg-amber-50',
       iconColor: 'bg-amber-500',
       textColor: 'text-amber-900',
-      change: '+5 today',
+      change: reviewStats ? `Avg: ${reviewStats.average_rating}★` : '+5 today',
       changePositive: true
     }
   ];
@@ -138,31 +193,101 @@ const Dashboard = () => {
           {/* Recent Feedback */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-neutral-200">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-neutral-900">Customer Feedback</h2>
-              <span className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">
-                Latest Reviews
-              </span>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {feedbackData.slice(0, 4).map((feedback) => (
-                <div key={feedback.id} className="p-5 bg-neutral-50 rounded-lg border border-neutral-200">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="font-semibold text-neutral-900 mb-0.5">{feedback.name}</p>
-                      <p className="text-sm text-neutral-500">{feedback.date}</p>
-                    </div>
-                    <div className="flex">
-                      {[...Array(5)].map((_, i) => (
-                        <span key={i} className={`text-lg ${i < feedback.rating ? 'text-amber-400' : 'text-neutral-300'}`}>
-                          ★
-                        </span>
-                      ))}
-                    </div>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-neutral-900">Customer Feedback</h2>
+                {reviewStats && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-amber-50 rounded-full">
+                    <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                    <span className="text-sm font-medium text-amber-700">
+                      {reviewStats.average_rating}/5.0 Average
+                    </span>
                   </div>
-                  <p className="text-neutral-700 text-sm leading-relaxed">"{feedback.comment}"</p>
-                </div>
-              ))}
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-4 py-2 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium">
+                  {totalFeedback} Total Reviews
+                </span>
+                <button
+                  onClick={() => setShowAllReviews(!showAllReviews)}
+                  className="px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors"
+                >
+                  {showAllReviews ? 'Show Less' : 'View All'}
+                </button>
+              </div>
             </div>
+            
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600"></div>
+                <p className="mt-2 text-neutral-600">Loading reviews...</p>
+              </div>
+            ) : reviews.length === 0 ? (
+              <div className="text-center py-8">
+                <MessageSquare size={48} className="text-neutral-300 mx-auto mb-4" />
+                <p className="text-neutral-600">No reviews yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {(showAllReviews ? reviews : reviews.slice(0, 4)).map((feedback) => (
+                  <div key={feedback.id} className="p-5 bg-neutral-50 rounded-lg border border-neutral-200 group relative">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="font-semibold text-neutral-900 mb-0.5">{feedback.name}</p>
+                        <p className="text-sm text-neutral-500">{feedback.date}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex">
+                          {[...Array(5)].map((_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-4 h-4 ${
+                                i < feedback.rating ? 'text-amber-400 fill-amber-400' : 'text-neutral-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => handleDeleteReview(feedback.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Delete review"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-neutral-700 text-sm leading-relaxed">"{feedback.comment}"</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {reviewStats && (
+              <div className="mt-6 pt-6 border-t border-neutral-200">
+                <h3 className="text-sm font-semibold text-neutral-900 mb-3">Rating Distribution</h3>
+                <div className="grid grid-cols-5 gap-2">
+                  {[5, 4, 3, 2, 1].map((rating) => {
+                    const count = reviewStats.rating_distribution[`${rating}_star`] || 0;
+                    const percentage = totalFeedback > 0 ? (count / totalFeedback) * 100 : 0;
+                    return (
+                      <div key={rating} className="text-center">
+                        <div className="flex items-center gap-1 justify-center mb-1">
+                          <span className="text-xs font-medium">{rating}</span>
+                          <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                        </div>
+                        <div className="bg-neutral-200 rounded-full h-2">
+                          <div
+                            className="bg-amber-400 h-2 rounded-full transition-all"
+                            style={{ width: `${percentage}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-xs text-neutral-600 mt-1 block">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>

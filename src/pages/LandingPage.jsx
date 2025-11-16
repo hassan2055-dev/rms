@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Star, Mail, Lock, User, MessageSquare, ChevronRight, Award, Clock, Heart } from 'lucide-react';
 import { feedbackData } from '../data/feedbackData';
 import { menuData } from '../data/menuData';
+import apiService from '../services/apiService';
 
 const LandingPage = () => {
   const navigate = useNavigate();
@@ -16,12 +17,36 @@ const LandingPage = () => {
     role: 'admin'
   });
 
-  const [feedbackList, setFeedbackList] = useState(feedbackData);
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [newFeedback, setNewFeedback] = useState({
     name: '',
     rating: 5,
     comment: ''
   });
+
+  // Fetch reviews when component mounts
+  useEffect(() => {
+    fetchReviews();
+  }, []);
+
+  const fetchReviews = async () => {
+    try {
+      setLoading(true);
+      const response = await apiService.getReviews();
+      if (response.success) {
+        setFeedbackList(response.reviews);
+      }
+    } catch (err) {
+      console.error('Failed to fetch reviews:', err);
+      // Fallback to static data if API fails
+      setFeedbackList(feedbackData);
+      setError('Failed to load reviews from server');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -29,16 +54,27 @@ const LandingPage = () => {
     navigate('/dashboard');
   };
 
-  const handleFeedbackSubmit = (e) => {
+  const handleFeedbackSubmit = async (e) => {
     e.preventDefault();
-    const feedback = {
-      id: feedbackList.length + 1,
-      ...newFeedback,
-      date: new Date().toISOString().split('T')[0]
-    };
-    setFeedbackList([feedback, ...feedbackList]);
-    setNewFeedback({ name: '', rating: 5, comment: '' });
-    alert('Thank you for your feedback!');
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await apiService.createReview(newFeedback);
+      
+      if (response.success) {
+        // Add new review to the beginning of the list
+        setFeedbackList([response.review, ...feedbackList]);
+        setNewFeedback({ name: '', rating: 5, comment: '' });
+        alert('Thank you for your feedback! It has been saved successfully.');
+      }
+    } catch (err) {
+      console.error('Failed to submit feedback:', err);
+      setError('Failed to submit feedback. Please try again.');
+      alert('Sorry, there was an error submitting your feedback. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const featuredItems = menuData.slice(0, 6);
@@ -299,29 +335,46 @@ const LandingPage = () => {
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-neutral-900 mb-4">Customer Feedback</h2>
             <p className="text-lg text-neutral-600">Hear what our customers have to say</p>
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm max-w-md mx-auto">
+                {error}
+              </div>
+            )}
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-16">
-            {feedbackList.map((feedback) => (
-              <div key={feedback.id} className="bg-white rounded-xl p-6 shadow-sm">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h4 className="font-semibold text-neutral-900">{feedback.name}</h4>
-                    <p className="text-sm text-neutral-500">{feedback.date}</p>
-                  </div>
-                  <div className="flex gap-0.5">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        size={16}
-                        className={i < feedback.rating ? 'text-amber-400 fill-amber-400' : 'text-neutral-300'}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <p className="text-neutral-700 leading-relaxed">{feedback.comment}</p>
+            {loading && feedbackList.length === 0 ? (
+              <div className="col-span-full text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600"></div>
+                <p className="mt-2 text-neutral-600">Loading reviews...</p>
               </div>
-            ))}
+            ) : feedbackList.length === 0 ? (
+              <div className="col-span-full text-center py-8">
+                <MessageSquare size={48} className="text-neutral-300 mx-auto mb-4" />
+                <p className="text-neutral-600">No reviews yet. Be the first to leave a review!</p>
+              </div>
+            ) : (
+              feedbackList.map((feedback) => (
+                <div key={feedback.id} className="bg-white rounded-xl p-6 shadow-sm">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-semibold text-neutral-900">{feedback.name}</h4>
+                      <p className="text-sm text-neutral-500">{feedback.date}</p>
+                    </div>
+                    <div className="flex gap-0.5">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          size={16}
+                          className={i < feedback.rating ? 'text-amber-400 fill-amber-400' : 'text-neutral-300'}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-neutral-700 leading-relaxed">{feedback.comment}</p>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-sm p-8">
@@ -374,9 +427,21 @@ const LandingPage = () => {
               </div>
               <button
                 type="submit"
-                className="w-full bg-neutral-900 hover:bg-neutral-800 text-white py-3 rounded-lg font-semibold transition-all"
+                disabled={loading}
+                className={`w-full py-3 rounded-lg font-semibold transition-all ${
+                  loading 
+                    ? 'bg-neutral-400 cursor-not-allowed' 
+                    : 'bg-neutral-900 hover:bg-neutral-800 text-white'
+                }`}
               >
-                Submit Feedback
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Submitting...
+                  </div>
+                ) : (
+                  'Submit Feedback'
+                )}
               </button>
             </form>
           </div>
