@@ -53,6 +53,39 @@ class ApiService {
     return this.request('/stats');
   }
 
+  // Menu API methods
+  async getMenu() {
+    return this.request('/menu');
+  }
+
+  async createMenuItem(itemData) {
+    return this.request('/menu', {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    });
+  }
+
+  async getMenuItem(id) {
+    return this.request(`/menu/${id}`);
+  }
+
+  async updateMenuItem(id, itemData) {
+    return this.request(`/menu/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(itemData),
+    });
+  }
+
+  async deleteMenuItem(id) {
+    return this.request(`/menu/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getMenuCategories() {
+    return this.request('/menu/categories');
+  }
+
   // Health check
   async healthCheck() {
     return this.request('/health');

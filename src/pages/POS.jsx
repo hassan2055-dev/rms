@@ -1,16 +1,41 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import MenuItem from '../components/MenuItem';
 import { Plus, Minus, Trash2, ShoppingCart, User } from 'lucide-react';
-import { menuData } from '../data/menuData';
+import apiService from '../services/apiService';
 
 const POS = () => {
   const [cart, setCart] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [customerName, setCustomerName] = useState('');
+  const [menuData, setMenuData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const categories = ['All', ...new Set(menuData.map(item => item.category))];
+
+  // Fetch menu data on component mount
+  useEffect(() => {
+    const fetchMenuData = async () => {
+      try {
+        setLoading(true);
+        const response = await apiService.getMenu();
+        if (response.success) {
+          setMenuData(response.menu);
+        } else {
+          setError('Failed to load menu items');
+        }
+      } catch (err) {
+        setError('Failed to load menu items: ' + err.message);
+        console.error('Error fetching menu data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMenuData();
+  }, []);
 
   const filteredMenu = selectedCategory === 'All' 
     ? menuData 
@@ -65,6 +90,47 @@ const POS = () => {
     setCart([]);
     setCustomerName('');
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-neutral-50">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Navbar title="Point of Sale" />
+          <main className="flex-1 overflow-y-auto p-8 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 mx-auto mb-4"></div>
+              <p className="text-neutral-600">Loading menu items...</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex h-screen bg-neutral-50">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Navbar title="Point of Sale" />
+          <main className="flex-1 overflow-y-auto p-8 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800"
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-neutral-50">

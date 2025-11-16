@@ -1,27 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import MenuItem from '../components/MenuItem';
 import { Plus, Edit, Trash2, X, Grid, List } from 'lucide-react';
-import { menuData as initialMenuData } from '../data/menuData';
+import apiService from '../services/apiService';
 
 const MenuManagement = () => {
-  const [menuItems, setMenuItems] = useState(initialMenuData);
+  const [menuItems, setMenuItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [viewMode, setViewMode] = useState('card'); // 'card' or 'table'
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [categories, setCategories] = useState(['Pizza', 'Burgers', 'Sides', 'Drinks', 'Salads', 'Appetizers', 'Desserts']);
   const [formData, setFormData] = useState({
     name: '',
     category: '',
     price: '',
     description: ''
   });
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [menuResponse, categoriesResponse] = await Promise.all([
+          apiService.getMenu(),
+          apiService.getMenuCategories()
+        ]);
+        
+        if (menuResponse.success) {
+          setMenuItems(menuResponse.menu);
+        }
+        
+        if (categoriesResponse.success && categoriesResponse.categories.length > 0) {
+          setCategories(categoriesResponse.categories);
+        }
+      } catch (err) {
+        setError('Failed to load menu data: ' + err.message);
+        console.error('Error fetching menu data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const categories = ['Pizza', 'Burgers', 'Sides', 'Drinks', 'Salads', 'Appetizers', 'Desserts'];
+    fetchData();
+  }, []);
 
   const handleAdd = () => {
     setEditingItem(null);
-    setFormData({ name: '', category: 'Pizza', price: '', description: '' });
+    setFormData({ name: '', category: categories[0] || 'Pizza', price: '', description: '' });
     setShowModal(true);
   };
 
@@ -36,33 +63,98 @@ const MenuManagement = () => {
     setShowModal(true);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
-      setMenuItems(menuItems.filter(item => item.id !== id));
+      try {
+        const response = await apiService.deleteMenuItem(id);
+        if (response.success) {
+          setMenuItems(menuItems.filter(item => item.id !== id));
+        } else {
+          alert('Failed to delete item: ' + response.error);
+        }
+      } catch (err) {
+        console.error('Error deleting item:', err);
+        alert('Failed to delete item: ' + err.message);
+      }
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (editingItem) {
-      setMenuItems(menuItems.map(item => 
-        item.id === editingItem.id 
-          ? { ...item, ...formData, price: parseFloat(formData.price) }
-          : item
-      ));
-    } else {
-      const newItem = {
-        id: Math.max(...menuItems.map(item => item.id)) + 1,
+    try {
+      const itemData = {
         ...formData,
         price: parseFloat(formData.price)
       };
-      setMenuItems([...menuItems, newItem]);
+      
+      let response;
+      if (editingItem) {
+        response = await apiService.updateMenuItem(editingItem.id, itemData);
+        if (response.success) {
+          setMenuItems(menuItems.map(item => 
+            item.id === editingItem.id ? response.item : item
+          ));
+        }
+      } else {
+        response = await apiService.createMenuItem(itemData);
+        if (response.success) {
+          setMenuItems([...menuItems, response.item]);
+        }
+      }
+      
+      if (response.success) {
+        setShowModal(false);
+        setFormData({ name: '', category: categories[0] || 'Pizza', price: '', description: '' });
+      } else {
+        alert('Failed to save item: ' + response.error);
+      }
+    } catch (err) {
+      console.error('Error saving item:', err);
+      alert('Failed to save item: ' + err.message);
     }
-    
-    setShowModal(false);
-    setFormData({ name: '', category: '', price: '', description: '' });
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-neutral-50">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Navbar title="Menu Management" />
+          <main className="flex-1 overflow-y-auto p-8 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-neutral-900 mx-auto mb-4"></div>
+              <p className="text-neutral-600">Loading menu items...</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex h-screen bg-neutral-50">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Navbar title="Menu Management" />
+          <main className="flex-1 overflow-y-auto p-8 flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="px-4 py-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800"
+              >
+                Retry
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-neutral-50">
@@ -216,7 +308,10 @@ const MenuManagement = () => {
                 {editingItem ? 'Edit Menu Item' : 'Add New Item'}
               </h3>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  setFormData({ name: '', category: categories[0] || 'Pizza', price: '', description: '' });
+                }}
                 className="text-neutral-500 hover:text-neutral-700 p-1 hover:bg-neutral-100 rounded-lg transition-colors"
               >
                 <X size={20} />
@@ -280,7 +375,10 @@ const MenuManagement = () => {
               <div className="flex gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setFormData({ name: '', category: categories[0] || 'Pizza', price: '', description: '' });
+                  }}
                   className="flex-1 px-4 py-2.5 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-50 transition-colors font-medium text-sm"
                 >
                   Cancel

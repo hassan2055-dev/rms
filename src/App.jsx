@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import MenuManagement from './pages/MenuManagement';
+import FullMenu from './pages/FullMenu';
 import POS from './pages/POS';
 import Orders from './pages/Orders';
 import Billing from './pages/Billing';
@@ -15,6 +16,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/full-menu" element={<FullMenu />} />
           
           <Route 
             path="/dashboard" 

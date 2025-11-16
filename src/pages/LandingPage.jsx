@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Star, Mail, Lock, User, MessageSquare, ChevronRight, Award, Clock, Heart } from 'lucide-react';
 import { feedbackData } from '../data/feedbackData';
@@ -20,16 +20,31 @@ const LandingPage = () => {
   const [feedbackList, setFeedbackList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
   const [newFeedback, setNewFeedback] = useState({
     name: '',
     rating: 5,
     comment: ''
   });
 
-  // Fetch reviews when component mounts
+  // Fetch reviews and menu when component mounts
   useEffect(() => {
     fetchReviews();
+    fetchMenuItems();
   }, []);
+
+  const fetchMenuItems = async () => {
+    try {
+      const response = await apiService.getMenu();
+      if (response.success) {
+        setMenuItems(response.menu);
+      }
+    } catch (err) {
+      console.error('Failed to fetch menu items:', err);
+      // Fallback to static data if API fails
+      setMenuItems(menuData);
+    }
+  };
 
   const fetchReviews = async () => {
     try {
@@ -77,7 +92,22 @@ const LandingPage = () => {
     }
   };
 
-  const featuredItems = menuData.slice(0, 6);
+  const getItemEmoji = (category) => {
+    const emojiMap = {
+      'Pizza': '🍕',
+      'Burgers': '🍔',
+      'Sides': '🍟',
+      'Drinks': '🥤',
+      'Salads': '🥗',
+      'Appetizers': '🍗',
+      'Desserts': '🍰',
+      'Pasta': '🍝',
+      'Sandwiches': '🥪'
+    };
+    return emojiMap[category] || '🍽️';
+  };
+
+  const featuredItems = menuItems.slice(0, 6);
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -122,10 +152,13 @@ const LandingPage = () => {
               Where exceptional flavors meet unforgettable moments. Indulge in our carefully crafted dishes made with the finest ingredients.
             </p>
             <div className="flex flex-wrap gap-4">
-              <a href="#menu" className="group bg-amber-500 hover:bg-amber-600 text-neutral-900 px-8 py-4 rounded-lg font-semibold transition-all flex items-center gap-2">
+              <Link 
+                to="/full-menu" 
+                className="group bg-amber-500 hover:bg-amber-600 text-neutral-900 px-8 py-4 rounded-lg font-semibold transition-all flex items-center gap-2"
+              >
                 View Our Menu
                 <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-              </a>
+              </Link>
               <a href="#feedback" className="bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 px-8 py-4 rounded-lg font-semibold transition-all">
                 Share Feedback
               </a>
@@ -136,7 +169,7 @@ const LandingPage = () => {
                 <p className="text-sm text-neutral-400">Happy Customers</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-amber-400 mb-1">50+</p>
+                <p className="text-3xl font-bold text-amber-400 mb-1">{menuItems.length}+</p>
                 <p className="text-sm text-neutral-400">Menu Items</p>
               </div>
               <div>
@@ -287,7 +320,7 @@ const LandingPage = () => {
             {featuredItems.map((item) => (
               <div key={item.id} className="group bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300">
                 <div className="h-48 bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
-                  <span className="text-6xl opacity-90">🍕</span>
+                  <span className="text-6xl opacity-90">{getItemEmoji(item.category)}</span>
                 </div>
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-3">
@@ -300,18 +333,24 @@ const LandingPage = () => {
                     <span className="text-xl font-bold text-amber-600">${item.price}</span>
                   </div>
                   <p className="text-neutral-600 text-sm mb-4 leading-relaxed">{item.description}</p>
-                  <button className="w-full bg-neutral-900 hover:bg-neutral-800 text-white py-2.5 rounded-lg font-medium text-sm transition-all">
-                    Order Now
-                  </button>
+                  <Link 
+                    to="/full-menu" 
+                    className="block w-full bg-neutral-900 hover:bg-neutral-800 text-white py-2.5 rounded-lg font-medium text-sm transition-all text-center"
+                  >
+                    View Full Menu
+                  </Link>
                 </div>
               </div>
             ))}
           </div>
           <div className="text-center mt-12">
-            <a href="#menu" className="inline-flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white px-8 py-3 rounded-lg font-semibold transition-all">
+            <Link 
+              to="/full-menu" 
+              className="inline-flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white px-8 py-3 rounded-lg font-semibold transition-all"
+            >
               View Full Menu
               <ChevronRight size={20} />
-            </a>
+            </Link>
           </div>
         </div>
       </section>
