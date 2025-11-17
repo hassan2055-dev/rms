@@ -205,6 +205,20 @@ const MenuManagement = () => {
 
             {viewMode === 'card' ? (
               <div className="p-6">
+                {menuItems.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">🍽️</div>
+                    <h3 className="text-xl font-semibold text-neutral-900 mb-2">No menu items present</h3>
+                    <p className="text-neutral-600 mb-6">Start by adding your first menu item</p>
+                    <button
+                      onClick={handleAdd}
+                      className="inline-flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                      <Plus size={18} />
+                      Add First Item
+                    </button>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {menuItems.map((item) => (
                     <div key={item.id} className="relative group">
@@ -229,9 +243,24 @@ const MenuManagement = () => {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
+                {menuItems.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">🍽️</div>
+                    <h3 className="text-xl font-semibold text-neutral-900 mb-2">No menu items present</h3>
+                    <p className="text-neutral-600 mb-6">Start by adding your first menu item</p>
+                    <button
+                      onClick={handleAdd}
+                      className="inline-flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                    >
+                      <Plus size={18} />
+                      Add First Item
+                    </button>
+                  </div>
+                ) : (
                 <table className="w-full">
                   <thead className="bg-neutral-50">
                     <tr>
@@ -294,6 +323,7 @@ const MenuManagement = () => {
                     ))}
                   </tbody>
                 </table>
+                )}
               </div>
             )}
           </div>

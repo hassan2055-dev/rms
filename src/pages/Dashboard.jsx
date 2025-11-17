@@ -2,10 +2,6 @@ import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { DollarSign, ShoppingBag, TrendingUp, MessageSquare, ArrowUpRight, Star, Trash2 } from 'lucide-react';
-import { ordersData } from '../data/ordersData';
-import { billsData } from '../data/billsData';
-import { feedbackData } from '../data/feedbackData';
-import { menuData } from '../data/menuData';
 import apiService from '../services/apiService';
 
 const Dashboard = () => {
@@ -13,8 +9,11 @@ const Dashboard = () => {
   const [reviewStats, setReviewStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAllReviews, setShowAllReviews] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
 
-  // Fetch reviews and stats when component mounts
+  // Fetch all data when component mounts
   useEffect(() => {
     fetchReviews();
     fetchReviewStats();
@@ -29,8 +28,6 @@ const Dashboard = () => {
       }
     } catch (err) {
       console.error('Failed to fetch reviews:', err);
-      // Fallback to static data if API fails
-      setReviews(feedbackData);
     } finally {
       setLoading(false);
     }
@@ -63,14 +60,14 @@ const Dashboard = () => {
   };
 
   // Calculate statistics
-  const totalSales = billsData.reduce((sum, bill) => sum + bill.total, 0);
-  const totalOrders = ordersData.length;
+  const totalSales = bills.reduce((sum, bill) => sum + bill.total, 0);
+  const totalOrders = orders.length;
   const totalFeedback = reviews.length;
   
   // Find top selling item
-  const topItem = menuData.reduce((max, item) => 
-    item.price > max.price ? item : max, menuData[0]
-  );
+  const topItem = menuItems.length > 0 
+    ? menuItems.reduce((max, item) => item.price > max.price ? item : max, menuItems[0])
+    : null;
 
   const stats = [
     {
@@ -95,13 +92,13 @@ const Dashboard = () => {
     },
     {
       title: 'Top Selling Item',
-      value: topItem.name,
+      value: topItem ? topItem.name : 'No items',
       icon: TrendingUp,
       bgColor: 'bg-purple-50',
       iconColor: 'bg-purple-500',
       textColor: 'text-purple-900',
-      change: 'Most Popular',
-      changePositive: true
+      change: topItem ? 'Most Popular' : 'Not present',
+      changePositive: topItem !== null
     },
     {
       title: 'Total Feedback',
@@ -153,8 +150,14 @@ const Dashboard = () => {
                 View All
               </button>
             </div>
+            {orders.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag size={48} className="text-neutral-300 mx-auto mb-4" />
+                <p className="text-neutral-600">No orders present</p>
+              </div>
+            ) : (
             <div className="space-y-4">
-              {ordersData.slice(0, 6).map((order) => (
+              {orders.slice(0, 6).map((order) => (
                 <div key={order.id} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg hover:bg-neutral-100 transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-semibold shadow-sm">
@@ -188,6 +191,7 @@ const Dashboard = () => {
                 </div>
               ))}
             </div>
+            )}
           </div>
 
           {/* Recent Feedback */}

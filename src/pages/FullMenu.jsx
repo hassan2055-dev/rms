@@ -204,7 +204,21 @@ const FullMenu = () => {
         </div>
 
         {/* Menu Grid */}
-        {filteredMenu.length === 0 ? (
+        {menuItems.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="text-6xl mb-4">🍽️</div>
+            <h3 className="text-xl font-semibold text-neutral-900 mb-2">No menu items present</h3>
+            <p className="text-neutral-600 mb-6">
+              Our menu is currently being updated. Please check back soon!
+            </p>
+            <Link
+              to="/"
+              className="inline-block px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
+            >
+              Back to Home
+            </Link>
+          </div>
+        ) : filteredMenu.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-6xl mb-4">🍽️</div>
             <h3 className="text-xl font-semibold text-neutral-900 mb-2">No items found</h3>

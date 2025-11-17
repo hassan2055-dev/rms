@@ -219,11 +219,6 @@ function Login() {
           </button>
         </div>
 
-        <div style={styles.testCredentials}>
-          <p style={styles.testTitle}>Test Credentials:</p>
-          <p style={styles.testText}>Admin: admin@restaurant.com / admin123</p>
-          <p style={styles.testText}>Cashier: john@restaurant.com / john123</p>
-        </div>
 
         <button 
           onClick={() => navigate('/')} 

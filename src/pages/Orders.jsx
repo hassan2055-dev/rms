@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { Filter, Trash2, Eye, X } from 'lucide-react';
-import { ordersData as initialOrdersData } from '../data/ordersData';
+import { Filter, Trash2, Eye, X, ShoppingBag } from 'lucide-react';
 
 const Orders = () => {
-  const [orders, setOrders] = useState(initialOrdersData);
+  const [orders, setOrders] = useState([]);
   const [filterStatus, setFilterStatus] = useState('All');
   const [viewingOrder, setViewingOrder] = useState(null);
 
@@ -153,7 +152,13 @@ const Orders = () => {
                   ))}
                 </tbody>
               </table>
-              {filteredOrders.length === 0 && (
+              {orders.length === 0 ? (
+                <div className="text-center py-16">
+                  <ShoppingBag size={48} className="text-neutral-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-neutral-900 mb-2">No orders present</h3>
+                  <p className="text-neutral-600">Orders will appear here once customers place them.</p>
+                </div>
+              ) : filteredOrders.length === 0 && (
                 <div className="text-center py-16">
                   <div className="inline-block p-6 bg-neutral-100 rounded-xl mb-3">
                     <span className="text-4xl">📋</span>

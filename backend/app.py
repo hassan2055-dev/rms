@@ -106,12 +106,10 @@ def init_database():
     conn.execute('''
         CREATE TABLE IF NOT EXISTS review (
             ReviewID INTEGER PRIMARY KEY AUTOINCREMENT,
-            CustomerID INTEGER,
             rating INTEGER NOT NULL CHECK(rating >= 1 AND rating <= 5),
             name TEXT NOT NULL,
             description TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (CustomerID) REFERENCES customer (CustomerID)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -126,74 +124,6 @@ def init_database():
             FOREIGN KEY (TableID) REFERENCES restaurant_table (TableID)
         )
     ''')
-    
-    # Create legacy reviews table for compatibility
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS reviews (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            rating INTEGER NOT NULL,
-            comment TEXT NOT NULL,
-            date TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Insert sample menu data if table is empty
-    menu_count = conn.execute('SELECT COUNT(*) FROM menu').fetchone()[0]
-    if menu_count == 0:
-        sample_menu = [
-            ("Margherita Pizza", 12.99, "Pizza", "Classic pizza with tomato sauce, mozzarella, and basil"),
-            ("Pepperoni Pizza", 14.99, "Pizza", "Loaded with pepperoni and mozzarella cheese"),
-            ("Classic Burger", 9.99, "Burgers", "Beef patty with lettuce, tomato, and special sauce"),
-            ("Cheese Burger", 10.99, "Burgers", "Beef patty with double cheese, lettuce, and pickles"),
-            ("French Fries", 4.99, "Sides", "Crispy golden fries with seasoning"),
-            ("Onion Rings", 5.99, "Sides", "Crispy battered onion rings"),
-            ("Coca Cola", 2.99, "Drinks", "Chilled soft drink"),
-            ("Orange Juice", 3.99, "Drinks", "Fresh squeezed orange juice"),
-            ("Caesar Salad", 7.99, "Salads", "Fresh romaine lettuce with Caesar dressing"),
-            ("Chicken Wings", 11.99, "Appetizers", "Spicy chicken wings with ranch dip")
-        ]
-        
-        conn.executemany(
-            'INSERT INTO menu (name, price, category, description) VALUES (?, ?, ?, ?)',
-            sample_menu
-        )
-    
-    # Insert sample data for legacy reviews table if empty
-    reviews_count = conn.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
-    if reviews_count == 0:
-        sample_reviews = [
-            ("Emily Davis", 5, "Amazing food and excellent service! Will definitely come back.", "2025-10-12"),
-            ("Tom Wilson", 4, "Great pizza! A bit crowded during lunch hours though.", "2025-10-11"),
-            ("Lisa Anderson", 5, "Best burgers in town! Love the atmosphere too.", "2025-10-10"),
-            ("David Martinez", 3, "Food was good but service was slow.", "2025-10-09"),
-        ]
-        
-        conn.executemany(
-            'INSERT INTO reviews (name, rating, comment, date) VALUES (?, ?, ?, ?)',
-            sample_reviews
-        )
-    
-    # Insert sample restaurant tables
-    table_count = conn.execute('SELECT COUNT(*) FROM restaurant_table').fetchone()[0]
-    if table_count == 0:
-        for i in range(1, 21):  # Create 20 tables
-            conn.execute('INSERT INTO restaurant_table (TableID) VALUES (?)', (i,))
-    
-    # Insert sample employee data if empty
-    employee_count = conn.execute('SELECT COUNT(*) FROM employee').fetchone()[0]
-    if employee_count == 0:
-        sample_employees = [
-            ("admin@restaurant.com", generate_password_hash("admin123"), "admin"),
-            ("john@restaurant.com", generate_password_hash("john123"), "cashier"),
-            ("sarah@restaurant.com", generate_password_hash("sarah123"), "cashier")
-        ]
-        
-        conn.executemany(
-            'INSERT INTO employee (email, password, role) VALUES (?, ?, ?)',
-            sample_employees
-        )
     
     conn.commit()
     conn.close()
@@ -338,7 +268,7 @@ def get_reviews():
     try:
         conn = get_db_connection()
         reviews = conn.execute(
-            'SELECT id, name, rating, comment, date FROM reviews ORDER BY created_at DESC'
+            'SELECT ReviewID, name, rating, description, created_at FROM review ORDER BY created_at DESC'
         ).fetchall()
         conn.close()
         
@@ -346,16 +276,17 @@ def get_reviews():
         reviews_list = []
         for review in reviews:
             reviews_list.append({
-                'id': review['id'],
+                'id': review['ReviewID'],
                 'name': review['name'],
                 'rating': review['rating'],
-                'comment': review['comment'],
-                'date': review['date']
+                'comment': review['description'],
+                'date': review['created_at'].split()[0] if review['created_at'] else ''
             })
         
         return jsonify({
             'success': True,
-            'reviews': reviews_list
+            'reviews': reviews_list,
+            'message': 'No reviews present' if len(reviews_list) == 0 else None
         })
     except Exception as e:
         return jsonify({
@@ -386,11 +317,11 @@ def create_review():
         # Get current date
         current_date = datetime.now().strftime('%Y-%m-%d')
         
-        # Insert into database
+        # Insert into database (CustomerID is optional/nullable)
         conn = get_db_connection()
         cursor = conn.execute(
-            'INSERT INTO reviews (name, rating, comment, date) VALUES (?, ?, ?, ?)',
-            (data['name'], data['rating'], data['comment'], current_date)
+            'INSERT INTO review (name, rating, description) VALUES (?, ?, ?)',
+            (data['name'], data['rating'], data['comment'])
         )
         review_id = cursor.lastrowid
         conn.commit()
@@ -420,7 +351,7 @@ def get_review(review_id):
     try:
         conn = get_db_connection()
         review = conn.execute(
-            'SELECT id, name, rating, comment, date FROM reviews WHERE id = ?',
+            'SELECT ReviewID, name, rating, description, created_at FROM review WHERE ReviewID = ?',
             (review_id,)
         ).fetchone()
         conn.close()
@@ -429,11 +360,11 @@ def get_review(review_id):
             return jsonify({
                 'success': True,
                 'review': {
-                    'id': review['id'],
+                    'id': review['ReviewID'],
                     'name': review['name'],
                     'rating': review['rating'],
-                    'comment': review['comment'],
-                    'date': review['date']
+                    'comment': review['description'],
+                    'date': review['created_at'].split()[0] if review['created_at'] else ''
                 }
             })
         else:
@@ -453,7 +384,7 @@ def delete_review(review_id):
     """Delete a review"""
     try:
         conn = get_db_connection()
-        cursor = conn.execute('DELETE FROM reviews WHERE id = ?', (review_id,))
+        cursor = conn.execute('DELETE FROM review WHERE ReviewID = ?', (review_id,))
         conn.commit()
         
         if cursor.rowcount > 0:
@@ -482,24 +413,24 @@ def get_stats():
         conn = get_db_connection()
         
         # Get total reviews count
-        total_reviews = conn.execute('SELECT COUNT(*) FROM reviews').fetchone()[0]
+        total_reviews = conn.execute('SELECT COUNT(*) FROM review').fetchone()[0]
         
         # Get average rating
-        avg_rating = conn.execute('SELECT AVG(rating) FROM reviews').fetchone()[0]
+        avg_rating = conn.execute('SELECT AVG(rating) FROM review').fetchone()[0]
         avg_rating = round(avg_rating, 1) if avg_rating else 0
         
         # Get rating distribution
         rating_dist = conn.execute('''
             SELECT rating, COUNT(*) as count 
-            FROM reviews 
+            FROM review 
             GROUP BY rating 
             ORDER BY rating DESC
         ''').fetchall()
         
         # Get recent reviews count (last 7 days)
         recent_reviews = conn.execute('''
-            SELECT COUNT(*) FROM reviews 
-            WHERE date >= date('now', '-7 days')
+            SELECT COUNT(*) FROM review 
+            WHERE created_at >= datetime('now', '-7 days')
         ''').fetchone()[0]
         
         conn.close()
@@ -550,7 +481,8 @@ def get_menu():
         
         return jsonify({
             'success': True,
-            'menu': menu_list
+            'menu': menu_list,
+            'message': 'No menu items present' if len(menu_list) == 0 else None
         })
     except Exception as e:
         return jsonify({
@@ -745,7 +677,8 @@ def get_menu_categories():
         
         return jsonify({
             'success': True,
-            'categories': category_list
+            'categories': category_list,
+            'message': 'No categories present' if len(category_list) == 0 else None
         })
     except Exception as e:
         return jsonify({

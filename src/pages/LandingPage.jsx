@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Star, Mail, Lock, User, MessageSquare, ChevronRight, Award, Clock, Heart } from 'lucide-react';
-import { feedbackData } from '../data/feedbackData';
-import { menuData } from '../data/menuData';
 import apiService from '../services/apiService';
 
 const LandingPage = () => {
@@ -41,8 +39,6 @@ const LandingPage = () => {
       }
     } catch (err) {
       console.error('Failed to fetch menu items:', err);
-      // Fallback to static data if API fails
-      setMenuItems(menuData);
     }
   };
 
@@ -55,8 +51,6 @@ const LandingPage = () => {
       }
     } catch (err) {
       console.error('Failed to fetch reviews:', err);
-      // Fallback to static data if API fails
-      setFeedbackList(feedbackData);
       setError('Failed to load reviews from server');
     } finally {
       setLoading(false);
@@ -169,7 +163,7 @@ const LandingPage = () => {
                 <p className="text-sm text-neutral-400">Happy Customers</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-amber-400 mb-1">{menuItems.length}+</p>
+                <p className="text-3xl font-bold text-amber-400 mb-1">{menuItems.length}</p>
                 <p className="text-sm text-neutral-400">Menu Items</p>
               </div>
               <div>
@@ -316,6 +310,13 @@ const LandingPage = () => {
               Explore our carefully crafted menu featuring dishes made with the finest ingredients
             </p>
           </div>
+          {featuredItems.length === 0 ? (
+            <div className="text-center py-16 col-span-full">
+              <div className="text-6xl mb-4">🍽️</div>
+              <h3 className="text-xl font-semibold text-neutral-900 mb-2">No menu items available</h3>
+              <p className="text-neutral-600">Check back soon for our delicious dishes!</p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {featuredItems.map((item) => (
               <div key={item.id} className="group bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300">
@@ -343,6 +344,8 @@ const LandingPage = () => {
               </div>
             ))}
           </div>
+          )}
+          {featuredItems.length > 0 && (
           <div className="text-center mt-12">
             <Link 
               to="/full-menu" 
@@ -352,6 +355,7 @@ const LandingPage = () => {
               <ChevronRight size={20} />
             </Link>
           </div>
+          )}
         </div>
       </section>
 

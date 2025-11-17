@@ -1,16 +1,14 @@
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { Printer, Eye, X } from 'lucide-react';
-import { billsData as initialBillsData } from '../data/billsData';
-import { ordersData } from '../data/ordersData';
+import { Printer, Eye, X, DollarSign } from 'lucide-react';
 
 const Billing = () => {
-  const [bills] = useState(initialBillsData);
+  const [bills] = useState([]);
   const [viewingBill, setViewingBill] = useState(null);
 
   const handlePrint = (bill) => {
-    const order = ordersData.find(o => o.id === bill.orderId);
+    const order = null; // Orders would come from API in full implementation
     
     const printContent = `
       ========================================
@@ -40,7 +38,7 @@ const Billing = () => {
   };
 
   const viewBillDetails = (bill) => {
-    const order = ordersData.find(o => o.id === bill.orderId);
+    const order = null; // Orders would come from API in full implementation
     setViewingBill({ ...bill, order });
   };
 
@@ -151,10 +149,9 @@ const Billing = () => {
               </table>
               {bills.length === 0 && (
                 <div className="text-center py-16">
-                  <div className="inline-block p-6 bg-neutral-100 rounded-xl mb-3">
-                    <span className="text-4xl">🧾</span>
-                  </div>
-                  <p className="text-neutral-500 font-medium">No bills found.</p>
+                  <DollarSign size={48} className="text-neutral-300 mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-neutral-900 mb-2">No bills present</h3>
+                  <p className="text-neutral-600">Bills will appear here once orders are completed and paid.</p>
                 </div>
               )}
             </div>
