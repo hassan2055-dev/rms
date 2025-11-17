@@ -13,12 +13,13 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
-  const login = (email, password, role) => {
-    // Dummy login logic - accepts any email/password
+  const login = (employeeData) => {
+    // Store employee data from API response
     setUser({
-      email,
-      role,
-      name: role === 'admin' ? 'Admin User' : 'Cashier User'
+      id: employeeData.id,
+      email: employeeData.email,
+      role: employeeData.role,
+      name: employeeData.role === 'admin' ? 'Admin User' : 'Cashier User'
     });
     return true;
   };

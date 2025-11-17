@@ -124,13 +124,13 @@ const LandingPage = () => {
                 <p className="text-xs text-amber-600 font-medium">Fine Dining Experience</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowLogin(!showLogin)}
+            <Link 
+              to="/login"
               className="bg-neutral-900 hover:bg-neutral-800 text-white px-6 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center gap-2"
             >
               <User size={18} />
               Staff Login
-            </button>
+            </Link>
           </div>
         </div>
       </header>

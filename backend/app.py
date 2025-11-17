@@ -3,6 +3,7 @@ from flask_cors import CORS
 import sqlite3
 from datetime import datetime
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -49,6 +50,7 @@ def init_database():
             EmpID INTEGER PRIMARY KEY AUTOINCREMENT,
             password TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
+            role TEXT NOT NULL DEFAULT 'cashier',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -179,8 +181,156 @@ def init_database():
         for i in range(1, 21):  # Create 20 tables
             conn.execute('INSERT INTO restaurant_table (TableID) VALUES (?)', (i,))
     
+    # Insert sample employee data if empty
+    employee_count = conn.execute('SELECT COUNT(*) FROM employee').fetchone()[0]
+    if employee_count == 0:
+        sample_employees = [
+            ("admin@restaurant.com", generate_password_hash("admin123"), "admin"),
+            ("john@restaurant.com", generate_password_hash("john123"), "cashier"),
+            ("sarah@restaurant.com", generate_password_hash("sarah123"), "cashier")
+        ]
+        
+        conn.executemany(
+            'INSERT INTO employee (email, password, role) VALUES (?, ?, ?)',
+            sample_employees
+        )
+    
     conn.commit()
     conn.close()
+
+# ==================== AUTHENTICATION ENDPOINTS ====================
+
+@app.route('/api/auth/signup', methods=['POST'])
+def signup():
+    """Register a new employee"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data or not all(key in data for key in ['email', 'password', 'role']):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: email, password, role'
+            }), 400
+        
+        # Validate email format
+        email = data['email'].strip().lower()
+        if '@' not in email or '.' not in email:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+        
+        # Validate password length
+        if len(data['password']) < 6:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be at least 6 characters long'
+            }), 400
+        
+        # Validate role
+        role = data['role'].lower()
+        if role not in ['admin', 'cashier']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid role. Must be admin or cashier'
+            }), 400
+        
+        # Check if email already exists
+        conn = get_db_connection()
+        existing_user = conn.execute(
+            'SELECT EmpID FROM employee WHERE email = ?',
+            (email,)
+        ).fetchone()
+        
+        if existing_user:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Email already registered'
+            }), 409
+        
+        # Hash the password
+        hashed_password = generate_password_hash(data['password'])
+        
+        # Insert new employee
+        cursor = conn.execute(
+            'INSERT INTO employee (email, password, role) VALUES (?, ?, ?)',
+            (email, hashed_password, role)
+        )
+        emp_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Employee registered successfully',
+            'employee': {
+                'id': emp_id,
+                'email': email,
+                'role': role
+            }
+        }), 201
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/auth/signin', methods=['POST'])
+def signin():
+    """Authenticate an employee"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data or not all(key in data for key in ['email', 'password']):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: email, password'
+            }), 400
+        
+        email = data['email'].strip().lower()
+        
+        # Find employee by email
+        conn = get_db_connection()
+        employee = conn.execute(
+            'SELECT EmpID, email, password, role FROM employee WHERE email = ?',
+            (email,)
+        ).fetchone()
+        conn.close()
+        
+        if not employee:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email or password'
+            }), 401
+        
+        # Verify password
+        if not check_password_hash(employee['password'], data['password']):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email or password'
+            }), 401
+        
+        return jsonify({
+            'success': True,
+            'message': 'Login successful',
+            'employee': {
+                'id': employee['EmpID'],
+                'email': employee['email'],
+                'role': employee['role']
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ==================== REVIEWS ENDPOINTS ====================
 
 @app.route('/api/reviews', methods=['GET'])
 def get_reviews():

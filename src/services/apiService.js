@@ -86,6 +86,21 @@ class ApiService {
     return this.request('/menu/categories');
   }
 
+  // Authentication API methods
+  async signup(credentials) {
+    return this.request('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+  }
+
+  async signin(credentials) {
+    return this.request('/auth/signin', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+  }
+
   // Health check
   async healthCheck() {
     return this.request('/health');

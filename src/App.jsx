@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import MenuManagement from './pages/MenuManagement';
 import FullMenu from './pages/FullMenu';
@@ -16,6 +17,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/full-menu" element={<FullMenu />} />
           
           <Route 
