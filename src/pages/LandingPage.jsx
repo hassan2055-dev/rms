@@ -393,7 +393,7 @@ const LandingPage = () => {
                 <p className="text-neutral-600">No reviews yet. Be the first to leave a review!</p>
               </div>
             ) : (
-              feedbackList.map((feedback) => (
+              feedbackList.slice(0, 4).map((feedback) => (
                 <div key={feedback.id} className="bg-white rounded-xl p-6 shadow-sm">
                   <div className="flex justify-between items-start mb-3">
                     <div>
