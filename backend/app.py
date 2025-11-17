@@ -125,6 +125,13 @@ def init_database():
         )
     ''')
     
+    # Initialize default tables if none exist
+    table_count = conn.execute('SELECT COUNT(*) FROM restaurant_table').fetchone()[0]
+    if table_count == 0:
+        # Create 12 tables by default
+        for i in range(1, 13):
+            conn.execute('INSERT INTO restaurant_table (TableID) VALUES (?)', (i,))
+    
     conn.commit()
     conn.close()
 
@@ -680,6 +687,212 @@ def get_menu_categories():
             'categories': category_list,
             'message': 'No categories present' if len(category_list) == 0 else None
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ==================== EMPLOYEE ENDPOINTS ====================
+
+@app.route('/api/employees', methods=['GET'])
+def get_employees():
+    """Get all employees"""
+    try:
+        conn = get_db_connection()
+        employees = conn.execute(
+            'SELECT EmpID, email, role FROM employee ORDER BY EmpID'
+        ).fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries with availability status
+        employees_list = []
+        for emp in employees:
+            employees_list.append({
+                'id': emp['EmpID'],
+                'email': emp['email'],
+                'role': emp['role'],
+                'availability': 'available'  # Default to available (no schema change needed)
+            })
+        
+        return jsonify({
+            'success': True,
+            'employees': employees_list
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ==================== RESERVATION ENDPOINTS ====================
+
+@app.route('/api/tables', methods=['GET'])
+def get_tables():
+    """Get all tables with their reservation status"""
+    try:
+        conn = get_db_connection()
+        
+        # Get all tables with their reservation status
+        tables = conn.execute('''
+            SELECT 
+                t.TableID,
+                r.ReservationID,
+                r.CustomerID,
+                c.CustomerName
+            FROM restaurant_table t
+            LEFT JOIN reservation r ON t.TableID = r.TableID
+            LEFT JOIN customer c ON r.CustomerID = c.CustomerID
+            ORDER BY t.TableID
+        ''').fetchall()
+        
+        conn.close()
+        
+        # Format the response
+        tables_list = []
+        for table in tables:
+            table_data = {
+                'id': table['TableID'],
+                'status': 'reserved' if table['ReservationID'] else 'available',
+                'customerName': table['CustomerName'] if table['CustomerName'] else None,
+                'customerId': table['CustomerID'] if table['CustomerID'] else None,
+                'reservationId': table['ReservationID'] if table['ReservationID'] else None
+            }
+            tables_list.append(table_data)
+        
+        return jsonify({
+            'success': True,
+            'tables': tables_list
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/reservations', methods=['POST'])
+def make_reservation():
+    """Make a table reservation with code verification"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data or not all(key in data for key in ['tableId', 'reservationCode', 'customerName']):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: tableId, reservationCode, customerName'
+            }), 400
+        
+        table_id = data['tableId']
+        reservation_code = data['reservationCode'].strip()
+        customer_name = data['customerName'].strip()
+        
+        # Verify the reservation code (for demo purposes, we'll use a simple verification)
+        # In a real system, this would check against a database of valid codes
+        # For now, let's accept codes that match the pattern: RES + TableID (e.g., "RES1", "RES2")
+        expected_code = f"RES{table_id}"
+        
+        if reservation_code.upper() != expected_code:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid reservation code. Please check your code and try again.'
+            }), 400
+        
+        conn = get_db_connection()
+        
+        # Check if table exists
+        table = conn.execute(
+            'SELECT TableID FROM restaurant_table WHERE TableID = ?',
+            (table_id,)
+        ).fetchone()
+        
+        if not table:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Table not found'
+            }), 404
+        
+        # Check if table is already reserved
+        existing_reservation = conn.execute(
+            'SELECT ReservationID FROM reservation WHERE TableID = ?',
+            (table_id,)
+        ).fetchone()
+        
+        if existing_reservation:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'This table is already reserved'
+            }), 409
+        
+        # Create or get customer
+        customer = conn.execute(
+            'SELECT CustomerID FROM customer WHERE CustomerName = ?',
+            (customer_name,)
+        ).fetchone()
+        
+        if customer:
+            customer_id = customer['CustomerID']
+        else:
+            # Create new customer
+            cursor = conn.execute(
+                'INSERT INTO customer (CustomerName) VALUES (?)',
+                (customer_name,)
+            )
+            customer_id = cursor.lastrowid
+        
+        # Create reservation
+        cursor = conn.execute(
+            'INSERT INTO reservation (CustomerID, TableID) VALUES (?, ?)',
+            (customer_id, table_id)
+        )
+        reservation_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Table reserved successfully',
+            'reservation': {
+                'id': reservation_id,
+                'tableId': table_id,
+                'customerId': customer_id,
+                'customerName': customer_name
+            }
+        }), 201
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/reservations/<int:reservation_id>', methods=['DELETE'])
+def cancel_reservation(reservation_id):
+    """Cancel a table reservation"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.execute(
+            'DELETE FROM reservation WHERE ReservationID = ?',
+            (reservation_id,)
+        )
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            conn.close()
+            return jsonify({
+                'success': True,
+                'message': 'Reservation cancelled successfully'
+            })
+        else:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Reservation not found'
+            }), 404
+            
     except Exception as e:
         return jsonify({
             'success': False,

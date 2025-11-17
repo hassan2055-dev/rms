@@ -6,6 +6,8 @@ import {
   ShoppingCart, 
   FileText, 
   Receipt, 
+  Calendar,
+  UserCheck,
   LogOut 
 } from 'lucide-react';
 
@@ -25,6 +27,8 @@ const Sidebar = () => {
     { path: '/pos', icon: ShoppingCart, label: 'POS', roles: ['admin', 'cashier'] },
     { path: '/orders', icon: FileText, label: 'Orders', roles: ['admin', 'cashier'] },
     { path: '/billing', icon: Receipt, label: 'Billing', roles: ['admin', 'cashier'] },
+    { path: '/reservation', icon: Calendar, label: 'Reservations', roles: ['admin', 'cashier'] },
+    { path: '/staff-availability', icon: UserCheck, label: 'Staff Availability', roles: ['admin'] },
   ];
 
   const filteredMenuItems = menuItems.filter(item => 
@@ -32,7 +36,7 @@ const Sidebar = () => {
   );
 
   return (
-    <div className="h-screen w-64 bg-neutral-900 text-white flex flex-col border-r border-neutral-800">
+    <div className="h-screen w-64 bg-neutral-900 text-white flex flex-col border-r border-neutral-800 sticky top-0">
       <div className="p-6 border-b border-neutral-800">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-lg flex items-center justify-center text-2xl shadow-sm">

@@ -101,6 +101,29 @@ class ApiService {
     });
   }
 
+  // Employee API methods
+  async getEmployees() {
+    return this.request('/employees');
+  }
+
+  // Reservation API methods
+  async getTables() {
+    return this.request('/tables');
+  }
+
+  async makeReservation(reservationData) {
+    return this.request('/reservations', {
+      method: 'POST',
+      body: JSON.stringify(reservationData),
+    });
+  }
+
+  async cancelReservation(reservationId) {
+    return this.request(`/reservations/${reservationId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Health check
   async healthCheck() {
     return this.request('/health');

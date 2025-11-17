@@ -12,10 +12,10 @@ const MenuManagement = () => {
   const [viewMode, setViewMode] = useState('card'); // 'card' or 'table'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [categories, setCategories] = useState(['Pizza', 'Burgers', 'Sides', 'Drinks', 'Salads', 'Appetizers', 'Desserts']);
+  const categories = ['Pizza', 'Burgers', 'Sides', 'Drinks', 'Salads', 'Appetizers', 'Desserts'];
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
+    category: 'Pizza',
     price: '',
     description: ''
   });
@@ -23,17 +23,10 @@ const MenuManagement = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [menuResponse, categoriesResponse] = await Promise.all([
-          apiService.getMenu(),
-          apiService.getMenuCategories()
-        ]);
+        const menuResponse = await apiService.getMenu();
         
         if (menuResponse.success) {
           setMenuItems(menuResponse.menu);
-        }
-        
-        if (categoriesResponse.success && categoriesResponse.categories.length > 0) {
-          setCategories(categoriesResponse.categories);
         }
       } catch (err) {
         setError('Failed to load menu data: ' + err.message);

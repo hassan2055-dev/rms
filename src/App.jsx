@@ -9,6 +9,8 @@ import FullMenu from './pages/FullMenu';
 import POS from './pages/POS';
 import Orders from './pages/Orders';
 import Billing from './pages/Billing';
+import Reservation from './pages/Reservation';
+import StaffAvailability from './pages/StaffAvailability';
 import './App.css';
 
 function App() {
@@ -19,6 +21,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/full-menu" element={<FullMenu />} />
+          <Route path="/reservation" element={<Reservation />} />
           
           <Route 
             path="/dashboard" 
@@ -61,6 +64,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Billing />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/staff-availability" 
+            element={
+              <ProtectedRoute adminOnly>
+                <StaffAvailability />
               </ProtectedRoute>
             } 
           />

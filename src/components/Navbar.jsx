@@ -1,5 +1,6 @@
 import { useAuth } from '../context/AuthContext';
-import { Bell, Search } from 'lucide-react';
+import { Bell, Search, Calendar } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const Navbar = ({ title }) => {
   const { user } = useAuth();
@@ -11,6 +12,13 @@ const Navbar = ({ title }) => {
           <h1 className="text-2xl font-bold text-neutral-900">{title}</h1>
         </div>
         <div className="flex items-center gap-3">
+          <Link 
+            to="/reservation" 
+            className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors font-medium text-sm"
+          >
+            <Calendar size={18} />
+            <span>Reserve Table</span>
+          </Link>
           <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
             <Search size={20} className="text-neutral-600" />
           </button>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Star, Mail, Lock, User, MessageSquare, ChevronRight, Award, Clock, Heart } from 'lucide-react';
+import { Star, Mail, Lock, User, MessageSquare, ChevronRight, Award, Clock, Heart, Calendar, Users, X, CheckCircle } from 'lucide-react';
 import apiService from '../services/apiService';
 
 const LandingPage = () => {
@@ -25,10 +25,22 @@ const LandingPage = () => {
     comment: ''
   });
 
+  // Reservation state
+  const [tables, setTables] = useState([]);
+  const [loadingTables, setLoadingTables] = useState(false);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [showReservationModal, setShowReservationModal] = useState(false);
+  const [reservationCode, setReservationCode] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [reservationError, setReservationError] = useState('');
+  const [reservationSuccess, setReservationSuccess] = useState('');
+  const [submittingReservation, setSubmittingReservation] = useState(false);
+
   // Fetch reviews and menu when component mounts
   useEffect(() => {
     fetchReviews();
     fetchMenuItems();
+    fetchTables();
   }, []);
 
   const fetchMenuItems = async () => {
@@ -54,6 +66,99 @@ const LandingPage = () => {
       setError('Failed to load reviews from server');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTables = async () => {
+    try {
+      setLoadingTables(true);
+      const response = await apiService.getTables();
+      if (response.success) {
+        setTables(response.tables);
+      }
+    } catch (err) {
+      console.error('Error fetching tables:', err);
+    } finally {
+      setLoadingTables(false);
+    }
+  };
+
+  const handleTableClick = (table) => {
+    if (table.status === 'available') {
+      setSelectedTable(table);
+      setShowReservationModal(true);
+      setReservationError('');
+      setReservationSuccess('');
+      setReservationCode('');
+      setCustomerName('');
+    }
+  };
+
+  const handleCloseReservationModal = () => {
+    setShowReservationModal(false);
+    setSelectedTable(null);
+    setReservationCode('');
+    setCustomerName('');
+    setReservationError('');
+    setReservationSuccess('');
+  };
+
+  const handleSubmitReservation = async (e) => {
+    e.preventDefault();
+    setReservationError('');
+    setReservationSuccess('');
+
+    if (!reservationCode.trim()) {
+      setReservationError('Please enter your reservation code');
+      return;
+    }
+
+    if (!customerName.trim()) {
+      setReservationError('Please enter your name');
+      return;
+    }
+
+    try {
+      setSubmittingReservation(true);
+      const response = await apiService.makeReservation({
+        tableId: selectedTable.id,
+        reservationCode: reservationCode.trim(),
+        customerName: customerName.trim(),
+      });
+
+      if (response.success) {
+        setReservationSuccess('Table reserved successfully!');
+        setTimeout(() => {
+          handleCloseReservationModal();
+          fetchTables(); // Refresh tables
+        }, 1500);
+      }
+    } catch (err) {
+      setReservationError(err.message || 'Failed to reserve table. Please check your code and try again.');
+    } finally {
+      setSubmittingReservation(false);
+    }
+  };
+
+  const getTableStatusColor = (status) => {
+    switch (status) {
+      case 'available':
+        return 'bg-green-100 border-green-300 hover:border-green-500 cursor-pointer';
+      case 'reserved':
+        return 'bg-amber-100 border-amber-300 cursor-not-allowed';
+      default:
+        return 'bg-gray-100 border-gray-300';
+    }
+  };
+
+  const getTableStatusText = (status) => {
+    switch (status) {
+      case 'available':
+        return 'Available';
+      case 'reserved':
+        return 'Reserved';
+      default:
+        return 'Unknown';
     }
   };
 
@@ -153,6 +258,10 @@ const LandingPage = () => {
                 View Our Menu
                 <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </Link>
+              <a href="#reservations" className="bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 px-8 py-4 rounded-lg font-semibold transition-all flex items-center gap-2">
+                <Calendar size={20} />
+                Reserve a Table
+              </a>
               <a href="#feedback" className="bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 px-8 py-4 rounded-lg font-semibold transition-all">
                 Share Feedback
               </a>
@@ -295,6 +404,87 @@ const LandingPage = () => {
               <p className="text-neutral-600 text-sm">Passionate chefs dedicated to excellence</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Reservations Section */}
+      <section id="reservations" className="py-20 bg-neutral-50">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <div className="inline-block px-4 py-1.5 bg-amber-100 text-amber-800 rounded-full mb-4">
+              <span className="font-semibold text-sm">Book Your Table</span>
+            </div>
+            <h2 className="text-4xl lg:text-5xl font-bold text-neutral-900 mb-4">Reserve a Table</h2>
+            <p className="text-lg text-neutral-600 max-w-2xl mx-auto">
+              Secure your spot at our restaurant. Select an available table and enter your reservation code.
+            </p>
+          </div>
+
+          {/* Legend */}
+          <div className="flex gap-6 mb-8 p-4 bg-white rounded-lg shadow-sm border border-neutral-200 max-w-md mx-auto justify-center">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
+              <span className="text-sm text-neutral-600">Available</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-amber-100 border-2 border-amber-300 rounded"></div>
+              <span className="text-sm text-neutral-600">Reserved</span>
+            </div>
+          </div>
+
+          {/* Tables Grid */}
+          {loadingTables ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
+              <p className="text-neutral-600">Loading tables...</p>
+            </div>
+          ) : tables.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-neutral-200">
+              <Calendar size={48} className="mx-auto text-neutral-400 mb-4" />
+              <p className="text-neutral-600">No tables available at the moment</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+              {tables.map((table) => (
+                <div
+                  key={table.id}
+                  onClick={() => handleTableClick(table)}
+                  className={`p-4 rounded-lg border-2 transition-all duration-200 ${getTableStatusColor(
+                    table.status
+                  )} ${
+                    table.status === 'available' ? 'hover:shadow-md hover:scale-105' : ''
+                  }`}
+                >
+                  <div className="text-center">
+                    <div className="flex justify-center mb-3">
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm">
+                        <Users size={24} className="text-neutral-600" />
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-bold text-neutral-900 mb-2">
+                      Table {table.id}
+                    </h3>
+                    <div
+                      className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        table.status === 'available'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-amber-500 text-white'
+                      }`}
+                    >
+                      {getTableStatusText(table.status)}
+                    </div>
+                    {table.status === 'reserved' && table.customerName && (
+                      <div className="mt-2 pt-2 border-t border-neutral-300">
+                        <p className="text-xs text-neutral-500">Reserved</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+
         </div>
       </section>
 
@@ -504,6 +694,100 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
+
+      {/* Reservation Modal */}
+      {showReservationModal && selectedTable && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-neutral-200">
+              <h3 className="text-xl font-bold text-neutral-900">
+                Reserve Table {selectedTable.id}
+              </h3>
+              <button
+                onClick={handleCloseReservationModal}
+                className="text-neutral-400 hover:text-neutral-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSubmitReservation} className="p-6">
+              <div className="mb-6">
+                <p className="text-neutral-600 mb-4">
+                  Please enter the reservation code that was sent to you after paying the
+                  reservation fee and your name to confirm your reservation.
+                </p>
+
+                {/* Customer Name Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Your Name
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Enter your full name"
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submittingReservation}
+                  />
+                </div>
+
+                {/* Reservation Code Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Reservation Code
+                  </label>
+                  <input
+                    type="text"
+                    value={reservationCode}
+                    onChange={(e) => setReservationCode(e.target.value)}
+                    placeholder="Enter your reservation code"
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submittingReservation}
+                  />
+                </div>
+
+                {/* Error Message */}
+                {reservationError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600">{reservationError}</p>
+                  </div>
+                )}
+
+                {/* Success Message */}
+                {reservationSuccess && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                    <CheckCircle size={20} className="text-green-600" />
+                    <p className="text-sm text-green-600">{reservationSuccess}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseReservationModal}
+                  className="flex-1 px-4 py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors font-medium"
+                  disabled={submittingReservation}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={submittingReservation}
+                >
+                  {submittingReservation ? 'Confirming...' : 'Confirm Reservation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

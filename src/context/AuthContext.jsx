@@ -11,21 +11,30 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    // Initialize user from localStorage
+    const savedUser = localStorage.getItem('rms_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
   const login = (employeeData) => {
     // Store employee data from API response
-    setUser({
+    const userData = {
       id: employeeData.id,
       email: employeeData.email,
       role: employeeData.role,
       name: employeeData.role === 'admin' ? 'Admin User' : 'Cashier User'
-    });
+    };
+    setUser(userData);
+    // Persist to localStorage
+    localStorage.setItem('rms_user', JSON.stringify(userData));
     return true;
   };
 
   const logout = () => {
     setUser(null);
+    // Clear from localStorage
+    localStorage.removeItem('rms_user');
   };
 
   const value = {
