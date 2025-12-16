@@ -1,0 +1,11 @@
+CREATE DATABASE DBMS_Project;
+GO
+
+USE DBMS_Project;
+GO
+
+CREATE TABLE Students (
+    StudentID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    CGPA FLOAT
+);

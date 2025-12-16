@@ -40,6 +40,7 @@ def init_database():
         CREATE TABLE IF NOT EXISTS customer (
             CustomerID INTEGER PRIMARY KEY AUTOINCREMENT,
             CustomerName TEXT NOT NULL,
+            phone TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -131,6 +132,30 @@ def init_database():
         # Create 12 tables by default
         for i in range(1, 13):
             conn.execute('INSERT INTO restaurant_table (TableID) VALUES (?)', (i,))
+    
+    # Initialize sample menu items if none exist
+    menu_count = conn.execute('SELECT COUNT(*) FROM menu').fetchone()[0]
+    if menu_count == 0:
+        sample_menu = [
+            ('Classic Burger', 8.99, 'Main Course', 'Juicy beef patty with lettuce, tomato, and special sauce'),
+            ('Grilled Chicken', 12.99, 'Main Course', 'Tender grilled chicken breast with herbs'),
+            ('Caesar Salad', 7.99, 'Appetizer', 'Fresh romaine lettuce with Caesar dressing and croutons'),
+            ('French Fries', 3.99, 'Side', 'Crispy golden fries'),
+            ('Onion Rings', 4.99, 'Side', 'Beer-battered crispy onion rings'),
+            ('Spaghetti Carbonara', 11.99, 'Main Course', 'Classic Italian pasta with bacon and cream sauce'),
+            ('Margherita Pizza', 10.99, 'Main Course', 'Traditional pizza with tomato, mozzarella, and basil'),
+            ('Chocolate Cake', 5.99, 'Dessert', 'Rich chocolate layer cake with ganache'),
+            ('Ice Cream Sundae', 4.99, 'Dessert', 'Vanilla ice cream with chocolate syrup and toppings'),
+            ('Soft Drink', 2.49, 'Beverage', 'Choice of cola, lemon-lime, or orange'),
+            ('Fresh Juice', 3.99, 'Beverage', 'Freshly squeezed orange or apple juice'),
+            ('Coffee', 2.99, 'Beverage', 'Hot brewed coffee')
+        ]
+        
+        for item in sample_menu:
+            conn.execute(
+                'INSERT INTO menu (name, price, category, description) VALUES (?, ?, ?, ?)',
+                item
+            )
     
     conn.commit()
     conn.close()
@@ -693,6 +718,86 @@ def get_menu_categories():
             'error': str(e)
         }), 500
 
+# ==================== CUSTOMER ENDPOINTS ====================
+
+@app.route('/api/customers', methods=['POST'])
+def create_customer():
+    """Create a new customer (always creates new even if name exists)"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data or 'name' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Missing required field: name'
+            }), 400
+        
+        customer_name = data['name'].strip()
+        phone = data.get('phone', '').strip()  # Optional phone number
+        
+        if not customer_name:
+            return jsonify({
+                'success': False,
+                'error': 'Customer name cannot be empty'
+            }), 400
+        
+        conn = get_db_connection()
+        
+        # Always create new customer (no duplicate check)
+        cursor = conn.execute(
+            'INSERT INTO customer (CustomerName, phone) VALUES (?, ?)',
+            (customer_name, phone)
+        )
+        customer_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'customer': {
+                'id': customer_id,
+                'name': customer_name,
+                'phone': phone
+            },
+            'message': 'Customer created successfully'
+        }), 201
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/customers', methods=['GET'])
+def get_customers():
+    """Get all customers"""
+    try:
+        conn = get_db_connection()
+        customers = conn.execute(
+            'SELECT CustomerID, CustomerName, phone, created_at FROM customer ORDER BY CustomerID DESC'
+        ).fetchall()
+        conn.close()
+        
+        customers_list = []
+        for customer in customers:
+            customers_list.append({
+                'id': customer['CustomerID'],
+                'name': customer['CustomerName'],
+                'phone': customer['phone'] or '',
+                'createdAt': customer['created_at']
+            })
+        
+        return jsonify({
+            'success': True,
+            'customers': customers_list
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # ==================== EMPLOYEE ENDPOINTS ====================
 
 @app.route('/api/employees', methods=['GET'])
@@ -719,6 +824,654 @@ def get_employees():
             'success': True,
             'employees': employees_list
         })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ==================== ORDERING TRANSACTION ENDPOINTS ====================
+# Transaction involves: orders, order_item, menu, customer, employee tables
+
+@app.route('/api/orders', methods=['POST'])
+def create_order():
+    """
+    Create a new order (TRANSACTION 1: Ordering)
+    Involves tables: orders, order_item, menu, customer, employee
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['customerName', 'empId', 'items']
+        if not data or not all(key in data for key in required_fields):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: customerName, empId, items'
+            }), 400
+        
+        customer_name = data['customerName'].strip()
+        emp_id = data['empId']
+        items = data['items']  # List of {itemId, quantity}
+        
+        if not customer_name:
+            return jsonify({
+                'success': False,
+                'error': 'Customer name cannot be empty'
+            }), 400
+        
+        if not items or len(items) == 0:
+            return jsonify({
+                'success': False,
+                'error': 'Order must contain at least one item'
+            }), 400
+        
+        conn = get_db_connection()
+        
+        try:
+            # Start transaction
+            conn.execute('BEGIN TRANSACTION')
+            
+            # 1. Verify employee exists
+            employee = conn.execute(
+                'SELECT EmpID FROM employee WHERE EmpID = ?',
+                (emp_id,)
+            ).fetchone()
+            
+            if not employee:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Employee not found'
+                }), 404
+            
+            # 2. Create customer (always create new, even if name exists)
+            phone = data.get('phone', '')  # Optional phone number
+            cursor = conn.execute(
+                'INSERT INTO customer (CustomerName, phone) VALUES (?, ?)',
+                (customer_name, phone)
+            )
+            customer_id = cursor.lastrowid
+            
+            # 3. Create order
+            current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            cursor = conn.execute(
+                'INSERT INTO orders (date, EmpID, CustomerID, customer_name) VALUES (?, ?, ?, ?)',
+                (current_date, emp_id, customer_id, customer_name)
+            )
+            order_id = cursor.lastrowid
+            
+            # 4. Verify all menu items exist and add order items
+            order_items = []
+            total_amount = 0
+            
+            for item in items:
+                if 'itemId' not in item or 'quantity' not in item:
+                    conn.rollback()
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': 'Each item must have itemId and quantity'
+                    }), 400
+                
+                item_id = item['itemId']
+                quantity = item['quantity']
+                
+                if quantity <= 0:
+                    conn.rollback()
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': 'Quantity must be greater than 0'
+                    }), 400
+                
+                # Verify menu item exists and get price
+                menu_item = conn.execute(
+                    'SELECT ItemID, name, price FROM menu WHERE ItemID = ?',
+                    (item_id,)
+                ).fetchone()
+                
+                if not menu_item:
+                    conn.rollback()
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': f'Menu item with ID {item_id} not found'
+                    }), 404
+                
+                # Insert order item
+                conn.execute(
+                    'INSERT INTO order_item (OrderID, ItemID, quantity) VALUES (?, ?, ?)',
+                    (order_id, item_id, quantity)
+                )
+                
+                item_total = menu_item['price'] * quantity
+                total_amount += item_total
+                
+                order_items.append({
+                    'itemId': item_id,
+                    'name': menu_item['name'],
+                    'quantity': quantity,
+                    'price': menu_item['price'],
+                    'total': item_total
+                })
+            
+            # Commit transaction
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Order created successfully',
+                'order': {
+                    'orderId': order_id,
+                    'customerId': customer_id,
+                    'customerName': customer_name,
+                    'empId': emp_id,
+                    'date': current_date,
+                    'items': order_items,
+                    'totalAmount': round(total_amount, 2)
+                }
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            raise e
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/orders', methods=['GET'])
+def get_orders():
+    """Get all orders with their items"""
+    try:
+        conn = get_db_connection()
+        
+        # Get all orders
+        orders = conn.execute('''
+            SELECT 
+                o.OrderID,
+                o.date,
+                o.customer_name,
+                o.CustomerID,
+                o.EmpID,
+                e.email as emp_email
+            FROM orders o
+            LEFT JOIN employee e ON o.EmpID = e.EmpID
+            ORDER BY o.OrderID DESC
+        ''').fetchall()
+        
+        orders_list = []
+        for order in orders:
+            order_id = order['OrderID']
+            
+            # Get order items with menu details
+            items = conn.execute('''
+                SELECT 
+                    oi.ItemID,
+                    oi.quantity,
+                    m.name,
+                    m.price,
+                    (oi.quantity * m.price) as item_total
+                FROM order_item oi
+                JOIN menu m ON oi.ItemID = m.ItemID
+                WHERE oi.OrderID = ?
+            ''', (order_id,)).fetchall()
+            
+            items_list = []
+            total_amount = 0
+            for item in items:
+                items_list.append({
+                    'itemId': item['ItemID'],
+                    'name': item['name'],
+                    'quantity': item['quantity'],
+                    'price': item['price'],
+                    'total': item['item_total']
+                })
+                total_amount += item['item_total']
+            
+            orders_list.append({
+                'orderId': order_id,
+                'date': order['date'],
+                'customerName': order['customer_name'],
+                'customerId': order['CustomerID'],
+                'empId': order['EmpID'],
+                'empEmail': order['emp_email'],
+                'items': items_list,
+                'totalAmount': round(total_amount, 2)
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'orders': orders_list
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/orders/<int:order_id>', methods=['GET'])
+def get_order(order_id):
+    """Get a specific order with its items"""
+    try:
+        conn = get_db_connection()
+        
+        # Get order details
+        order = conn.execute('''
+            SELECT 
+                o.OrderID,
+                o.date,
+                o.customer_name,
+                o.CustomerID,
+                o.EmpID,
+                e.email as emp_email
+            FROM orders o
+            LEFT JOIN employee e ON o.EmpID = e.EmpID
+            WHERE o.OrderID = ?
+        ''', (order_id,)).fetchone()
+        
+        if not order:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Order not found'
+            }), 404
+        
+        # Get order items
+        items = conn.execute('''
+            SELECT 
+                oi.ItemID,
+                oi.quantity,
+                m.name,
+                m.price,
+                (oi.quantity * m.price) as item_total
+            FROM order_item oi
+            JOIN menu m ON oi.ItemID = m.ItemID
+            WHERE oi.OrderID = ?
+        ''', (order_id,)).fetchall()
+        
+        items_list = []
+        total_amount = 0
+        for item in items:
+            items_list.append({
+                'itemId': item['ItemID'],
+                'name': item['name'],
+                'quantity': item['quantity'],
+                'price': item['price'],
+                'total': item['item_total']
+            })
+            total_amount += item['item_total']
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'order': {
+                'orderId': order['OrderID'],
+                'date': order['date'],
+                'customerName': order['customer_name'],
+                'customerId': order['CustomerID'],
+                'empId': order['EmpID'],
+                'empEmail': order['emp_email'],
+                'items': items_list,
+                'totalAmount': round(total_amount, 2)
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/orders/<int:order_id>', methods=['DELETE'])
+def delete_order(order_id):
+    """Delete an order and its related order items"""
+    try:
+        conn = get_db_connection()
+        
+        # Check if order exists
+        order = conn.execute(
+            'SELECT OrderID FROM orders WHERE OrderID = ?',
+            (order_id,)
+        ).fetchone()
+        
+        if not order:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Order not found'
+            }), 404
+        
+        # Check if order has been billed
+        bill = conn.execute(
+            'SELECT billID FROM bill WHERE OrderID = ?',
+            (order_id,)
+        ).fetchone()
+        
+        if bill:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Cannot delete order that has been billed'
+            }), 400
+        
+        try:
+            # Start transaction
+            conn.execute('BEGIN TRANSACTION')
+            
+            # Delete order items first (foreign key constraint)
+            conn.execute('DELETE FROM order_item WHERE OrderID = ?', (order_id,))
+            
+            # Delete order
+            conn.execute('DELETE FROM orders WHERE OrderID = ?', (order_id,))
+            
+            # Commit transaction
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Order deleted successfully'
+            })
+            
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': f'Failed to delete order: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ==================== BILLING TRANSACTION ENDPOINTS ====================
+# Transaction involves: bill, orders, order_item, menu tables
+
+@app.route('/api/bills', methods=['POST'])
+def create_bill():
+    """
+    Create a bill for an order (TRANSACTION 2: Billing)
+    Involves tables: bill, orders, order_item, menu
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['orderId', 'paymentMethod']
+        if not data or not all(key in data for key in required_fields):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: orderId, paymentMethod'
+            }), 400
+        
+        order_id = data['orderId']
+        payment_method = data['paymentMethod'].strip().lower()
+        
+        # Validate payment method
+        valid_methods = ['cash', 'credit card', 'debit card', 'mobile payment']
+        if payment_method not in valid_methods:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid payment method. Must be one of: {", ".join(valid_methods)}'
+            }), 400
+        
+        conn = get_db_connection()
+        
+        try:
+            # Start transaction
+            conn.execute('BEGIN TRANSACTION')
+            
+            # 1. Verify order exists
+            order = conn.execute(
+                'SELECT OrderID, customer_name FROM orders WHERE OrderID = ?',
+                (order_id,)
+            ).fetchone()
+            
+            if not order:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Order not found'
+                }), 404
+            
+            # 2. Check if bill already exists for this order
+            existing_bill = conn.execute(
+                'SELECT billID FROM bill WHERE OrderID = ?',
+                (order_id,)
+            ).fetchone()
+            
+            if existing_bill:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Bill already exists for this order'
+                }), 409
+            
+            # 3. Calculate total amount from order items and menu prices
+            order_items = conn.execute('''
+                SELECT 
+                    oi.ItemID,
+                    oi.quantity,
+                    m.name,
+                    m.price,
+                    (oi.quantity * m.price) as item_total
+                FROM order_item oi
+                JOIN menu m ON oi.ItemID = m.ItemID
+                WHERE oi.OrderID = ?
+            ''', (order_id,)).fetchall()
+            
+            if not order_items or len(order_items) == 0:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Order has no items'
+                }), 400
+            
+            # Calculate total
+            total_amount = sum(item['item_total'] for item in order_items)
+            
+            # 4. Create bill
+            current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            cursor = conn.execute(
+                'INSERT INTO bill (OrderID, amount, method, date) VALUES (?, ?, ?, ?)',
+                (order_id, total_amount, payment_method, current_date)
+            )
+            bill_id = cursor.lastrowid
+            
+            # Get bill items for response
+            items_list = []
+            for item in order_items:
+                items_list.append({
+                    'itemId': item['ItemID'],
+                    'name': item['name'],
+                    'quantity': item['quantity'],
+                    'price': item['price'],
+                    'total': item['item_total']
+                })
+            
+            # Commit transaction
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Bill created successfully',
+                'bill': {
+                    'billId': bill_id,
+                    'orderId': order_id,
+                    'customerName': order['customer_name'],
+                    'amount': round(total_amount, 2),
+                    'paymentMethod': payment_method,
+                    'date': current_date,
+                    'items': items_list
+                }
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            raise e
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/bills', methods=['GET'])
+def get_bills():
+    """Get all bills with their order details"""
+    try:
+        conn = get_db_connection()
+        
+        # Get all bills with order information
+        bills = conn.execute('''
+            SELECT 
+                b.billID,
+                b.OrderID,
+                b.amount,
+                b.method,
+                b.date,
+                o.customer_name,
+                o.CustomerID
+            FROM bill b
+            JOIN orders o ON b.OrderID = o.OrderID
+            ORDER BY b.billID DESC
+        ''').fetchall()
+        
+        bills_list = []
+        for bill in bills:
+            order_id = bill['OrderID']
+            
+            # Get order items
+            items = conn.execute('''
+                SELECT 
+                    oi.ItemID,
+                    oi.quantity,
+                    m.name,
+                    m.price
+                FROM order_item oi
+                JOIN menu m ON oi.ItemID = m.ItemID
+                WHERE oi.OrderID = ?
+            ''', (order_id,)).fetchall()
+            
+            items_list = []
+            for item in items:
+                items_list.append({
+                    'itemId': item['ItemID'],
+                    'name': item['name'],
+                    'quantity': item['quantity'],
+                    'price': item['price']
+                })
+            
+            bills_list.append({
+                'billId': bill['billID'],
+                'orderId': order_id,
+                'customerName': bill['customer_name'],
+                'customerId': bill['CustomerID'],
+                'amount': bill['amount'],
+                'paymentMethod': bill['method'],
+                'date': bill['date'],
+                'items': items_list
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'bills': bills_list
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/bills/<int:bill_id>', methods=['GET'])
+def get_bill(bill_id):
+    """Get a specific bill with order details"""
+    try:
+        conn = get_db_connection()
+        
+        # Get bill details
+        bill = conn.execute('''
+            SELECT 
+                b.billID,
+                b.OrderID,
+                b.amount,
+                b.method,
+                b.date,
+                o.customer_name,
+                o.CustomerID
+            FROM bill b
+            JOIN orders o ON b.OrderID = o.OrderID
+            WHERE b.billID = ?
+        ''', (bill_id,)).fetchone()
+        
+        if not bill:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Bill not found'
+            }), 404
+        
+        # Get order items
+        items = conn.execute('''
+            SELECT 
+                oi.ItemID,
+                oi.quantity,
+                m.name,
+                m.price,
+                (oi.quantity * m.price) as item_total
+            FROM order_item oi
+            JOIN menu m ON oi.ItemID = m.ItemID
+            WHERE oi.OrderID = ?
+        ''', (bill['OrderID'],)).fetchall()
+        
+        items_list = []
+        for item in items:
+            items_list.append({
+                'itemId': item['ItemID'],
+                'name': item['name'],
+                'quantity': item['quantity'],
+                'price': item['price'],
+                'total': item['item_total']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'bill': {
+                'billId': bill['billID'],
+                'orderId': bill['OrderID'],
+                'customerName': bill['customer_name'],
+                'customerId': bill['CustomerID'],
+                'amount': bill['amount'],
+                'paymentMethod': bill['method'],
+                'date': bill['date'],
+                'items': items_list
+            }
+        })
+        
     except Exception as e:
         return jsonify({
             'success': False,
@@ -770,9 +1523,56 @@ def get_tables():
             'error': str(e)
         }), 500
 
+@app.route('/api/reservations', methods=['GET'])
+def get_reservations():
+    """Get all reservations with customer and table details"""
+    try:
+        conn = get_db_connection()
+        
+        reservations = conn.execute('''
+            SELECT 
+                r.ReservationID,
+                r.CustomerID,
+                r.TableID,
+                r.created_at,
+                c.CustomerName,
+                t.TableID as table_number
+            FROM reservation r
+            JOIN customer c ON r.CustomerID = c.CustomerID
+            JOIN restaurant_table t ON r.TableID = t.TableID
+            ORDER BY r.ReservationID DESC
+        ''').fetchall()
+        
+        reservations_list = []
+        for res in reservations:
+            reservations_list.append({
+                'reservationId': res['ReservationID'],
+                'customerId': res['CustomerID'],
+                'customerName': res['CustomerName'],
+                'tableId': res['TableID'],
+                'tableNumber': res['table_number'],
+                'createdAt': res['created_at']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'reservations': reservations_list
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/reservations', methods=['POST'])
 def make_reservation():
-    """Make a table reservation with code verification"""
+    """
+    Make a table reservation (TRANSACTION 3: Reservation)
+    Involves tables: reservation, customer, restaurant_table
+    """
     try:
         data = request.get_json()
         
@@ -787,6 +1587,12 @@ def make_reservation():
         reservation_code = data['reservationCode'].strip()
         customer_name = data['customerName'].strip()
         
+        if not customer_name:
+            return jsonify({
+                'success': False,
+                'error': 'Customer name cannot be empty'
+            }), 400
+        
         # Verify the reservation code (for demo purposes, we'll use a simple verification)
         # In a real system, this would check against a database of valid codes
         # For now, let's accept codes that match the pattern: RES + TableID (e.g., "RES1", "RES2")
@@ -800,68 +1606,126 @@ def make_reservation():
         
         conn = get_db_connection()
         
-        # Check if table exists
-        table = conn.execute(
-            'SELECT TableID FROM restaurant_table WHERE TableID = ?',
-            (table_id,)
-        ).fetchone()
-        
-        if not table:
-            conn.close()
-            return jsonify({
-                'success': False,
-                'error': 'Table not found'
-            }), 404
-        
-        # Check if table is already reserved
-        existing_reservation = conn.execute(
-            'SELECT ReservationID FROM reservation WHERE TableID = ?',
-            (table_id,)
-        ).fetchone()
-        
-        if existing_reservation:
-            conn.close()
-            return jsonify({
-                'success': False,
-                'error': 'This table is already reserved'
-            }), 409
-        
-        # Create or get customer
-        customer = conn.execute(
-            'SELECT CustomerID FROM customer WHERE CustomerName = ?',
-            (customer_name,)
-        ).fetchone()
-        
-        if customer:
-            customer_id = customer['CustomerID']
-        else:
-            # Create new customer
+        try:
+            # Start transaction
+            conn.execute('BEGIN TRANSACTION')
+            
+            # 1. Check if table exists in restaurant_table
+            table = conn.execute(
+                'SELECT TableID FROM restaurant_table WHERE TableID = ?',
+                (table_id,)
+            ).fetchone()
+            
+            if not table:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'Table not found'
+                }), 404
+            
+            # 2. Check if table is already reserved
+            existing_reservation = conn.execute(
+                'SELECT ReservationID FROM reservation WHERE TableID = ?',
+                (table_id,)
+            ).fetchone()
+            
+            if existing_reservation:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': 'This table is already reserved'
+                }), 409
+            
+            # 3. Create customer (always create new)
+            phone = data.get('phone', '')  # Optional phone number
             cursor = conn.execute(
-                'INSERT INTO customer (CustomerName) VALUES (?)',
-                (customer_name,)
+                'INSERT INTO customer (CustomerName, phone) VALUES (?, ?)',
+                (customer_name, phone)
             )
             customer_id = cursor.lastrowid
+            
+            # 4. Create reservation linking customer and table
+            cursor = conn.execute(
+                'INSERT INTO reservation (CustomerID, TableID) VALUES (?, ?)',
+                (customer_id, table_id)
+            )
+            reservation_id = cursor.lastrowid
+            
+            # Get the created_at timestamp
+            created_at = conn.execute(
+                'SELECT created_at FROM reservation WHERE ReservationID = ?',
+                (reservation_id,)
+            ).fetchone()['created_at']
+            
+            # Commit transaction
+            conn.commit()
+            conn.close()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Table reserved successfully',
+                'reservation': {
+                    'reservationId': reservation_id,
+                    'tableId': table_id,
+                    'customerId': customer_id,
+                    'customerName': customer_name,
+                    'createdAt': created_at
+                }
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            raise e
         
-        # Create reservation
-        cursor = conn.execute(
-            'INSERT INTO reservation (CustomerID, TableID) VALUES (?, ?)',
-            (customer_id, table_id)
-        )
-        reservation_id = cursor.lastrowid
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/reservations/<int:reservation_id>', methods=['GET'])
+def get_reservation(reservation_id):
+    """Get a specific reservation with customer and table details"""
+    try:
+        conn = get_db_connection()
         
-        conn.commit()
+        reservation = conn.execute('''
+            SELECT 
+                r.ReservationID,
+                r.CustomerID,
+                r.TableID,
+                r.created_at,
+                c.CustomerName,
+                t.TableID as table_number
+            FROM reservation r
+            JOIN customer c ON r.CustomerID = c.CustomerID
+            JOIN restaurant_table t ON r.TableID = t.TableID
+            WHERE r.ReservationID = ?
+        ''', (reservation_id,)).fetchone()
+        
+        if not reservation:
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Reservation not found'
+            }), 404
+        
         conn.close()
         
         return jsonify({
             'success': True,
-            'message': 'Table reserved successfully',
             'reservation': {
-                'id': reservation_id,
-                'tableId': table_id,
-                'customerId': customer_id,
-                'customerName': customer_name
+                'reservationId': reservation['ReservationID'],
+                'customerId': reservation['CustomerID'],
+                'customerName': reservation['CustomerName'],
+                'tableId': reservation['TableID'],
+                'tableNumber': reservation['table_number'],
+                'createdAt': reservation['created_at']
             }
-        }), 201
+        })
         
     except Exception as e:
         return jsonify({
