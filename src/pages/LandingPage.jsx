@@ -30,8 +30,13 @@ const LandingPage = () => {
   const [loadingTables, setLoadingTables] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
   const [showReservationModal, setShowReservationModal] = useState(false);
-  const [reservationCode, setReservationCode] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [reservationDate, setReservationDate] = useState('');
+  const [partySize, setPartySize] = useState(2);
+  const [paymentMethod, setPaymentMethod] = useState('credit card');
+  const [paymentAmount, setPaymentAmount] = useState(2.00);
+  const [specialRequests, setSpecialRequests] = useState('');
   const [reservationError, setReservationError] = useState('');
   const [reservationSuccess, setReservationSuccess] = useState('');
   const [submittingReservation, setSubmittingReservation] = useState(false);
@@ -89,16 +94,26 @@ const LandingPage = () => {
       setShowReservationModal(true);
       setReservationError('');
       setReservationSuccess('');
-      setReservationCode('');
       setCustomerName('');
+      setCustomerPhone('');
+      setReservationDate('');
+      setPartySize(2);
+      setPaymentMethod('credit card');
+      setPaymentAmount(table.price || 2.00);
+      setSpecialRequests('');
     }
   };
 
   const handleCloseReservationModal = () => {
     setShowReservationModal(false);
     setSelectedTable(null);
-    setReservationCode('');
     setCustomerName('');
+    setCustomerPhone('');
+    setReservationDate('');
+    setPartySize(2);
+    setPaymentMethod('credit card');
+    setPaymentAmount(2.00);
+    setSpecialRequests('');
     setReservationError('');
     setReservationSuccess('');
   };
@@ -108,13 +123,28 @@ const LandingPage = () => {
     setReservationError('');
     setReservationSuccess('');
 
-    if (!reservationCode.trim()) {
-      setReservationError('Please enter your reservation code');
+    if (!customerName.trim()) {
+      setReservationError('Please enter your name');
       return;
     }
 
-    if (!customerName.trim()) {
-      setReservationError('Please enter your name');
+    if (!reservationDate) {
+      setReservationError('Please select a reservation date');
+      return;
+    }
+
+    if (partySize < 1) {
+      setReservationError('Party size must be at least 1');
+      return;
+    }
+
+    if (selectedTable && partySize > selectedTable.capacity) {
+      setReservationError(`Party size (${partySize}) exceeds table capacity (${selectedTable.capacity}). Please select a larger table.`);
+      return;
+    }
+
+    if (paymentAmount <= 0) {
+      setReservationError('Payment amount must be greater than 0');
       return;
     }
 
@@ -122,19 +152,25 @@ const LandingPage = () => {
       setSubmittingReservation(true);
       const response = await apiService.makeReservation({
         tableId: selectedTable.id,
-        reservationCode: reservationCode.trim(),
         customerName: customerName.trim(),
+        phone: customerPhone.trim(),
+        reservationDate: reservationDate,
+        partySize: partySize,
+        paymentMethod: paymentMethod,
+        paymentAmount: paymentAmount,
+        specialRequests: specialRequests.trim(),
+        empId: null,
       });
 
       if (response.success) {
-        setReservationSuccess('Table reserved successfully!');
+        setReservationSuccess('Reservation successful!');
         setTimeout(() => {
           handleCloseReservationModal();
           fetchTables(); // Refresh tables
         }, 1500);
       }
     } catch (err) {
-      setReservationError(err.message || 'Failed to reserve table. Please check your code and try again.');
+      setReservationError(err.message || 'Failed to reserve table. Please try again.');
     } finally {
       setSubmittingReservation(false);
     }
@@ -416,7 +452,7 @@ const LandingPage = () => {
             </div>
             <h2 className="text-4xl lg:text-5xl font-bold text-neutral-900 mb-4">Reserve a Table</h2>
             <p className="text-lg text-neutral-600 max-w-2xl mx-auto">
-              Secure your spot at our restaurant. Select an available table and enter your reservation code.
+              Secure your spot at our restaurant. Select an available table and complete your payment to confirm your reservation.
             </p>
           </div>
 
@@ -701,9 +737,22 @@ const LandingPage = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-neutral-200">
-              <h3 className="text-xl font-bold text-neutral-900">
-                Reserve Table {selectedTable.id}
-              </h3>
+              <div>
+                <h3 className="text-xl font-bold text-neutral-900">
+                  Reserve Table {selectedTable.id}
+                </h3>
+                <div className="flex gap-3 mt-2">
+                  <span className="inline-block px-2 py-1 bg-neutral-100 text-neutral-700 text-xs font-medium rounded">
+                    {selectedTable.category}
+                  </span>
+                  <span className="inline-block px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded">
+                    Capacity: {selectedTable.capacity}
+                  </span>
+                  <span className="inline-block px-2 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded">
+                    ${selectedTable.price}
+                  </span>
+                </div>
+              </div>
               <button
                 onClick={handleCloseReservationModal}
                 className="text-neutral-400 hover:text-neutral-600 transition-colors"
@@ -716,14 +765,13 @@ const LandingPage = () => {
             <form onSubmit={handleSubmitReservation} className="p-6">
               <div className="mb-6">
                 <p className="text-neutral-600 mb-4">
-                  Please enter the reservation code that was sent to you after paying the
-                  reservation fee and your name to confirm your reservation.
+                  Complete the payment and reservation details below. A unique reservation code will be generated for you.
                 </p>
 
                 {/* Customer Name Input */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Your Name
+                    Your Name *
                   </label>
                   <input
                     type="text"
@@ -732,19 +780,102 @@ const LandingPage = () => {
                     placeholder="Enter your full name"
                     className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     disabled={submittingReservation}
+                    required
                   />
                 </div>
 
-                {/* Reservation Code Input */}
+                {/* Phone Number Input */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Reservation Code
+                    Phone Number (Optional)
                   </label>
                   <input
-                    type="text"
-                    value={reservationCode}
-                    onChange={(e) => setReservationCode(e.target.value)}
-                    placeholder="Enter your reservation code"
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="Enter your phone number"
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submittingReservation}
+                  />
+                </div>
+
+                {/* Reservation Date Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Reservation Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={reservationDate}
+                    onChange={(e) => setReservationDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submittingReservation}
+                    required
+                  />
+                </div>
+
+                {/* Party Size Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Party Size * <span className="text-xs text-neutral-500">(Max: {selectedTable.capacity})</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={partySize}
+                    onChange={(e) => setPartySize(parseInt(e.target.value))}
+                    min="1"
+                    max={selectedTable.capacity}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submittingReservation}
+                    required
+                  />
+                </div>
+
+                {/* Payment Method Dropdown */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submittingReservation}
+                    required
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="credit card">Credit Card</option>
+                    <option value="debit card">Debit Card</option>
+                    <option value="mobile payment">Mobile Payment</option>
+                  </select>
+                </div>
+
+                {/* Payment Amount Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Reservation Fee (USD) *
+                  </label>
+                  <input
+                    type="number"
+                    value={paymentAmount}
+                    readOnly
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50 text-neutral-700 font-semibold"
+                    required
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">Based on {selectedTable.category} table pricing</p>
+                </div>
+
+                {/* Special Requests Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Special Requests (Optional)
+                  </label>
+                  <textarea
+                    value={specialRequests}
+                    onChange={(e) => setSpecialRequests(e.target.value)}
+                    placeholder="e.g., Window seat, high chair needed"
+                    rows="3"
                     className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     disabled={submittingReservation}
                   />
@@ -781,7 +912,7 @@ const LandingPage = () => {
                   className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={submittingReservation}
                 >
-                  {submittingReservation ? 'Confirming...' : 'Confirm Reservation'}
+                  {submittingReservation ? 'Processing Payment...' : 'Pay & Reserve'}
                 </button>
               </div>
             </form>

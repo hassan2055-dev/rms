@@ -60,6 +60,9 @@ def init_database():
     conn.execute('''
         CREATE TABLE IF NOT EXISTS restaurant_table (
             TableID INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL DEFAULT 'Standard',
+            price DECIMAL(10, 2) NOT NULL DEFAULT 2.00,
+            capacity INTEGER NOT NULL DEFAULT 4,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -114,24 +117,58 @@ def init_database():
         )
     ''')
     
+    # Create PAYMENT table for reservation payments
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS payment (
+            PaymentID INTEGER PRIMARY KEY AUTOINCREMENT,
+            CustomerID INTEGER NOT NULL,
+            amount DECIMAL(10, 2) NOT NULL,
+            payment_method TEXT NOT NULL,
+            payment_status TEXT NOT NULL DEFAULT 'completed',
+            transaction_date TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (CustomerID) REFERENCES customer (CustomerID)
+        )
+    ''')
+    
     # Create RESERVATION table
     conn.execute('''
         CREATE TABLE IF NOT EXISTS reservation (
             ReservationID INTEGER PRIMARY KEY AUTOINCREMENT,
             CustomerID INTEGER NOT NULL,
             TableID INTEGER NOT NULL,
+            PaymentID INTEGER,
+            EmpID INTEGER,
+            reservation_date TEXT NOT NULL,
+            party_size INTEGER NOT NULL DEFAULT 2,
+            special_requests TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (CustomerID) REFERENCES customer (CustomerID),
-            FOREIGN KEY (TableID) REFERENCES restaurant_table (TableID)
+            FOREIGN KEY (TableID) REFERENCES restaurant_table (TableID),
+            FOREIGN KEY (PaymentID) REFERENCES payment (PaymentID),
+            FOREIGN KEY (EmpID) REFERENCES employee (EmpID)
         )
     ''')
     
     # Initialize default tables if none exist
     table_count = conn.execute('SELECT COUNT(*) FROM restaurant_table').fetchone()[0]
     if table_count == 0:
-        # Create 12 tables by default
-        for i in range(1, 13):
-            conn.execute('INSERT INTO restaurant_table (TableID) VALUES (?)', (i,))
+        # Create 12 tables by default with categories
+        tables_data = [
+            # Standard tables (1-4): 4 capacity, $2
+            *[(i, 'Standard', 2.00, 4) for i in range(1, 5)],
+            # Premium tables (5-8): 6 capacity, $5
+            *[(i, 'Premium', 5.00, 6) for i in range(5, 9)],
+            # VIP tables (9-10): 8 capacity, $10
+            *[(i, 'VIP', 10.00, 8) for i in range(9, 11)],
+            # Family tables (11-12): 10 capacity, $7
+            *[(i, 'Family', 7.00, 10) for i in range(11, 13)],
+        ]
+        for table_id, category, price, capacity in tables_data:
+            conn.execute(
+                'INSERT INTO restaurant_table (TableID, category, price, capacity) VALUES (?, ?, ?, ?)',
+                (table_id, category, price, capacity)
+            )
     
     # Initialize sample menu items if none exist
     menu_count = conn.execute('SELECT COUNT(*) FROM menu').fetchone()[0]
@@ -1490,6 +1527,9 @@ def get_tables():
         tables = conn.execute('''
             SELECT 
                 t.TableID,
+                t.category,
+                t.price,
+                t.capacity,
                 r.ReservationID,
                 r.CustomerID,
                 c.CustomerName
@@ -1506,6 +1546,9 @@ def get_tables():
         for table in tables:
             table_data = {
                 'id': table['TableID'],
+                'category': table['category'],
+                'price': float(table['price']),
+                'capacity': table['capacity'],
                 'status': 'reserved' if table['ReservationID'] else 'available',
                 'customerName': table['CustomerName'] if table['CustomerName'] else None,
                 'customerId': table['CustomerID'] if table['CustomerID'] else None,
@@ -1570,38 +1613,57 @@ def get_reservations():
 @app.route('/api/reservations', methods=['POST'])
 def make_reservation():
     """
-    Make a table reservation (TRANSACTION 3: Reservation)
-    Involves tables: reservation, customer, restaurant_table
+    Make a table reservation (TRANSACTION 3: Reservation with Payment)
+    Involves tables: customer, payment, restaurant_table, employee, reservation (5 tables)
+    
+    Flow: Customer pays first -> Receives reservation code -> Uses code to complete reservation
     """
     try:
         data = request.get_json()
         
         # Validate required fields
-        if not data or not all(key in data for key in ['tableId', 'reservationCode', 'customerName']):
+        required_fields = ['tableId', 'customerName', 'reservationDate', 'partySize', 'paymentMethod', 'paymentAmount']
+        if not data or not all(key in data for key in required_fields):
             return jsonify({
                 'success': False,
-                'error': 'Missing required fields: tableId, reservationCode, customerName'
+                'error': 'Missing required fields: tableId, customerName, reservationDate, partySize, paymentMethod, paymentAmount'
             }), 400
         
         table_id = data['tableId']
-        reservation_code = data['reservationCode'].strip()
         customer_name = data['customerName'].strip()
+        phone = data.get('phone', '').strip()
+        reservation_date = data['reservationDate']
+        party_size = data['partySize']
+        payment_method = data['paymentMethod'].strip().lower()
+        payment_amount = float(data['paymentAmount'])
+        special_requests = data.get('specialRequests', '').strip()
+        emp_id = data.get('empId', 1)  # Employee processing reservation (default to 1 if not provided)
         
+        # Validate inputs
         if not customer_name:
             return jsonify({
                 'success': False,
                 'error': 'Customer name cannot be empty'
             }), 400
         
-        # Verify the reservation code (for demo purposes, we'll use a simple verification)
-        # In a real system, this would check against a database of valid codes
-        # For now, let's accept codes that match the pattern: RES + TableID (e.g., "RES1", "RES2")
-        expected_code = f"RES{table_id}"
-        
-        if reservation_code.upper() != expected_code:
+        if party_size <= 0:
             return jsonify({
                 'success': False,
-                'error': 'Invalid reservation code. Please check your code and try again.'
+                'error': 'Party size must be greater than 0'
+            }), 400
+        
+        if payment_amount <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Payment amount must be greater than 0'
+            }), 400
+        
+        # Validate payment method
+        valid_methods = ['cash', 'credit card', 'debit card', 'mobile payment']
+        if payment_method not in valid_methods:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid payment method. Must be one of: {", ".join(valid_methods)}'
             }), 400
         
         conn = get_db_connection()
@@ -1610,9 +1672,24 @@ def make_reservation():
             # Start transaction
             conn.execute('BEGIN TRANSACTION')
             
-            # 1. Check if table exists in restaurant_table
+            # 1. Verify employee exists (if empId is provided)
+            if emp_id is not None:
+                employee = conn.execute(
+                    'SELECT EmpID FROM employee WHERE EmpID = ?',
+                    (emp_id,)
+                ).fetchone()
+                
+                if not employee:
+                    conn.rollback()
+                    conn.close()
+                    return jsonify({
+                        'success': False,
+                        'error': 'Employee not found'
+                    }), 404
+            
+            # 2. Check if table exists and get capacity
             table = conn.execute(
-                'SELECT TableID FROM restaurant_table WHERE TableID = ?',
+                'SELECT TableID, capacity, price, category FROM restaurant_table WHERE TableID = ?',
                 (table_id,)
             ).fetchone()
             
@@ -1624,10 +1701,20 @@ def make_reservation():
                     'error': 'Table not found'
                 }), 404
             
-            # 2. Check if table is already reserved
+            # Validate party size against table capacity
+            table_capacity = table['capacity']
+            if party_size > table_capacity:
+                conn.rollback()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'error': f'Party size ({party_size}) exceeds table capacity ({table_capacity}). Please select a larger table.'
+                }), 400
+            
+            # 3. Check if table is already reserved for this date
             existing_reservation = conn.execute(
-                'SELECT ReservationID FROM reservation WHERE TableID = ?',
-                (table_id,)
+                'SELECT ReservationID FROM reservation WHERE TableID = ? AND reservation_date = ?',
+                (table_id, reservation_date)
             ).fetchone()
             
             if existing_reservation:
@@ -1635,21 +1722,29 @@ def make_reservation():
                 conn.close()
                 return jsonify({
                     'success': False,
-                    'error': 'This table is already reserved'
+                    'error': 'This table is already reserved for the selected date'
                 }), 409
             
-            # 3. Create customer (always create new)
-            phone = data.get('phone', '')  # Optional phone number
+            # 4. Create customer record
             cursor = conn.execute(
                 'INSERT INTO customer (CustomerName, phone) VALUES (?, ?)',
                 (customer_name, phone)
             )
             customer_id = cursor.lastrowid
             
-            # 4. Create reservation linking customer and table
+            # 5. Process payment
+            current_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
             cursor = conn.execute(
-                'INSERT INTO reservation (CustomerID, TableID) VALUES (?, ?)',
-                (customer_id, table_id)
+                'INSERT INTO payment (CustomerID, amount, payment_method, payment_status, transaction_date) VALUES (?, ?, ?, ?, ?)',
+                (customer_id, payment_amount, payment_method, 'completed', current_date)
+            )
+            payment_id = cursor.lastrowid
+            
+            # 6. Create reservation linking customer, table, payment, and employee
+            cursor = conn.execute(
+                'INSERT INTO reservation (CustomerID, TableID, PaymentID, EmpID, reservation_date, party_size, special_requests) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (customer_id, table_id, payment_id, emp_id, reservation_date, party_size, special_requests)
             )
             reservation_id = cursor.lastrowid
             
@@ -1665,12 +1760,20 @@ def make_reservation():
             
             return jsonify({
                 'success': True,
-                'message': 'Table reserved successfully',
+                'message': 'Payment processed and table reserved successfully!',
                 'reservation': {
                     'reservationId': reservation_id,
                     'tableId': table_id,
                     'customerId': customer_id,
                     'customerName': customer_name,
+                    'phone': phone,
+                    'paymentId': payment_id,
+                    'paymentAmount': payment_amount,
+                    'paymentMethod': payment_method,
+                    'empId': emp_id,
+                    'reservationDate': reservation_date,
+                    'partySize': party_size,
+                    'specialRequests': special_requests,
                     'createdAt': created_at
                 }
             }), 201

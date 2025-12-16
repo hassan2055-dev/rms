@@ -13,9 +13,14 @@ const Reservation = () => {
   const [loading, setLoading] = useState(true);
   const [selectedTable, setSelectedTable] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [reservationCode, setReservationCode] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [reservationDate, setReservationDate] = useState('');
+  const [partySize, setPartySize] = useState(2);
+  const [paymentMethod, setPaymentMethod] = useState('credit card');
+  const [paymentAmount, setPaymentAmount] = useState(2.00);
+  const [specialRequests, setSpecialRequests] = useState('');
+  const [empId, setEmpId] = useState(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -52,18 +57,26 @@ const Reservation = () => {
       setShowModal(true);
       setError('');
       setSuccess('');
-      setReservationCode('');
       setCustomerName('');
       setCustomerPhone('');
+      setReservationDate('');
+      setPartySize(2);
+      setPaymentMethod('credit card');
+      setPaymentAmount(table.price || 2.00); // Set based on table price
+      setSpecialRequests('');
     }
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedTable(null);
-    setReservationCode('');
     setCustomerName('');
     setCustomerPhone('');
+    setReservationDate('');
+    setPartySize(2);
+    setPaymentMethod('credit card');
+    setPaymentAmount(2.00);
+    setSpecialRequests('');
     setError('');
     setSuccess('');
   };
@@ -73,13 +86,28 @@ const Reservation = () => {
     setError('');
     setSuccess('');
 
-    if (!reservationCode.trim()) {
-      setError('Please enter your reservation code');
+    if (!customerName.trim()) {
+      setError('Please enter your name');
       return;
     }
 
-    if (!customerName.trim()) {
-      setError('Please enter your name');
+    if (!reservationDate) {
+      setError('Please select a reservation date');
+      return;
+    }
+
+    if (partySize < 1) {
+      setError('Party size must be at least 1');
+      return;
+    }
+
+    if (selectedTable && partySize > selectedTable.capacity) {
+      setError(`Party size (${partySize}) exceeds table capacity (${selectedTable.capacity}). Please select a larger table.`);
+      return;
+    }
+
+    if (paymentAmount <= 0) {
+      setError('Payment amount must be greater than 0');
       return;
     }
 
@@ -87,13 +115,18 @@ const Reservation = () => {
       setSubmitting(true);
       const response = await apiService.makeReservation({
         tableId: selectedTable.id,
-        reservationCode: reservationCode.trim(),
         customerName: customerName.trim(),
         phone: customerPhone.trim(),
+        reservationDate: reservationDate,
+        partySize: partySize,
+        paymentMethod: paymentMethod,
+        paymentAmount: paymentAmount,
+        specialRequests: specialRequests.trim(),
+        empId: empId,
       });
 
       if (response.success) {
-        setSuccess('Table reserved successfully!');
+        setSuccess('Reservation successful!');
         setTimeout(() => {
           handleCloseModal();
           fetchTables(); // Refresh tables
@@ -227,6 +260,11 @@ const Reservation = () => {
                     <h3 className="text-xl font-bold text-neutral-900 mb-2">
                       Table {table.id}
                     </h3>
+                    <div className="mb-3">
+                      <span className="inline-block px-2 py-1 bg-neutral-100 text-neutral-700 text-xs font-medium rounded">
+                        {table.category}
+                      </span>
+                    </div>
                     <div
                       className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
                         table.status === 'available'
@@ -236,6 +274,18 @@ const Reservation = () => {
                     >
                       {getTableStatusText(table.status)}
                     </div>
+                    {table.status === 'available' && (
+                      <div className="mt-3 pt-3 border-t border-neutral-300">
+                        <div className="flex justify-between text-xs text-neutral-600 mb-1">
+                          <span>Capacity:</span>
+                          <span className="font-semibold">{table.capacity} people</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-neutral-600">
+                          <span>Price:</span>
+                          <span className="font-semibold text-amber-600">${table.price}</span>
+                        </div>
+                      </div>
+                    )}
                     {table.status === 'reserved' && table.customerName && (
                       <div className="mt-3 pt-3 border-t border-neutral-300">
                         <p className="text-xs text-neutral-500">Reserved by</p>
@@ -339,9 +389,22 @@ const Reservation = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-6 border-b border-neutral-200">
-              <h3 className="text-xl font-bold text-neutral-900">
-                Reserve Table {selectedTable.id}
-              </h3>
+              <div>
+                <h3 className="text-xl font-bold text-neutral-900">
+                  Reserve Table {selectedTable.id}
+                </h3>
+                <div className="flex gap-3 mt-2">
+                  <span className="inline-block px-2 py-1 bg-neutral-100 text-neutral-700 text-xs font-medium rounded">
+                    {selectedTable.category}
+                  </span>
+                  <span className="inline-block px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded">
+                    Capacity: {selectedTable.capacity}
+                  </span>
+                  <span className="inline-block px-2 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded">
+                    ${selectedTable.price}
+                  </span>
+                </div>
+              </div>
               <button
                 onClick={handleCloseModal}
                 className="text-neutral-400 hover:text-neutral-600 transition-colors"
@@ -354,8 +417,7 @@ const Reservation = () => {
             <form onSubmit={handleSubmitReservation} className="p-6">
               <div className="mb-6">
                 <p className="text-neutral-600 mb-4">
-                  Please enter the reservation code that was sent to you after paying the
-                  reservation fee and your name to confirm your reservation.
+                  Complete the payment and reservation details below. A unique reservation code will be generated for you.
                 </p>
 
                 {/* Customer Name Input */}
@@ -370,6 +432,7 @@ const Reservation = () => {
                     placeholder="Enter your full name"
                     className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     disabled={submitting}
+                    required
                   />
                 </div>
 
@@ -388,16 +451,83 @@ const Reservation = () => {
                   />
                 </div>
 
-                {/* Reservation Code Input */}
+                {/* Reservation Date Input */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Reservation Code
+                    Reservation Date *
                   </label>
                   <input
-                    type="text"
-                    value={reservationCode}
-                    onChange={(e) => setReservationCode(e.target.value)}
-                    placeholder="Enter your reservation code"
+                    type="date"
+                    value={reservationDate}
+                    onChange={(e) => setReservationDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submitting}
+                    required
+                  />
+                </div>
+
+                {/* Party Size Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Party Size * <span className="text-xs text-neutral-500">(Max: {selectedTable.capacity})</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={partySize}
+                    onChange={(e) => setPartySize(parseInt(e.target.value))}
+                    min="1"
+                    max={selectedTable.capacity}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submitting}
+                    required
+                  />
+                </div>
+
+                {/* Payment Method Dropdown */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Payment Method *
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submitting}
+                    required
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="credit card">Credit Card</option>
+                    <option value="debit card">Debit Card</option>
+                    <option value="mobile payment">Mobile Payment</option>
+                  </select>
+                </div>
+
+                {/* Payment Amount Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Reservation Fee (USD) *
+                  </label>
+                  <input
+                    type="number"
+                    value={paymentAmount}
+                    readOnly
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg bg-neutral-50 text-neutral-700 font-semibold"
+                    required
+                  />
+                  <p className="text-xs text-neutral-500 mt-1">Based on {selectedTable.category} table pricing</p>
+                </div>
+
+                {/* Special Requests Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Special Requests (Optional)
+                  </label>
+                  <textarea
+                    value={specialRequests}
+                    onChange={(e) => setSpecialRequests(e.target.value)}
+                    placeholder="e.g., Window seat, high chair needed"
+                    rows="3"
                     className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     disabled={submitting}
                   />
@@ -434,7 +564,7 @@ const Reservation = () => {
                   className="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={submitting}
                 >
-                  {submitting ? 'Confirming...' : 'Confirm Reservation'}
+                  {submitting ? 'Processing Payment...' : 'Pay & Reserve'}
                 </button>
               </div>
             </form>
