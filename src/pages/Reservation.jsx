@@ -15,6 +15,7 @@ const Reservation = () => {
   const [showModal, setShowModal] = useState(false);
   const [reservationCode, setReservationCode] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +54,7 @@ const Reservation = () => {
       setSuccess('');
       setReservationCode('');
       setCustomerName('');
+      setCustomerPhone('');
     }
   };
 
@@ -61,6 +63,7 @@ const Reservation = () => {
     setSelectedTable(null);
     setReservationCode('');
     setCustomerName('');
+    setCustomerPhone('');
     setError('');
     setSuccess('');
   };
@@ -86,6 +89,7 @@ const Reservation = () => {
         tableId: selectedTable.id,
         reservationCode: reservationCode.trim(),
         customerName: customerName.trim(),
+        phone: customerPhone.trim(),
       });
 
       if (response.success) {
@@ -357,13 +361,28 @@ const Reservation = () => {
                 {/* Customer Name Input */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Your Name
+                    Your Name *
                   </label>
                   <input
                     type="text"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="Enter your full name"
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    disabled={submitting}
+                  />
+                </div>
+
+                {/* Phone Number Input */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-neutral-700 mb-2">
+                    Phone Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="Enter your phone number"
                     className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                     disabled={submitting}
                   />

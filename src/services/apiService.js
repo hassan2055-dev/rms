@@ -106,7 +106,57 @@ class ApiService {
     return this.request('/employees');
   }
 
-  // Reservation API methods
+  // Customer API methods
+  async createCustomer(customerData) {
+    return this.request('/customers', {
+      method: 'POST',
+      body: JSON.stringify(customerData),
+    });
+  }
+
+  async getCustomers() {
+    return this.request('/customers');
+  }
+
+  // Orders API methods (Transaction 1: Ordering)
+  async createOrder(orderData) {
+    return this.request('/orders', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async getOrders() {
+    return this.request('/orders');
+  }
+
+  async getOrder(orderId) {
+    return this.request(`/orders/${orderId}`);
+  }
+
+  async deleteOrder(orderId) {
+    return this.request(`/orders/${orderId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Bills API methods (Transaction 2: Billing)
+  async createBill(billData) {
+    return this.request('/bills', {
+      method: 'POST',
+      body: JSON.stringify(billData),
+    });
+  }
+
+  async getBills() {
+    return this.request('/bills');
+  }
+
+  async getBill(billId) {
+    return this.request(`/bills/${billId}`);
+  }
+
+  // Reservation API methods (Transaction 3: Reservation)
   async getTables() {
     return this.request('/tables');
   }
@@ -116,6 +166,14 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(reservationData),
     });
+  }
+
+  async getReservations() {
+    return this.request('/reservations');
+  }
+
+  async getReservation(reservationId) {
+    return this.request(`/reservations/${reservationId}`);
   }
 
   async cancelReservation(reservationId) {

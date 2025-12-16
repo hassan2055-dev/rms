@@ -3,15 +3,20 @@ import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import MenuItem from '../components/MenuItem';
 import { Plus, Minus, Trash2, ShoppingCart, User } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import apiService from '../services/apiService';
 
 const POS = () => {
+  const { user } = useAuth();
   const [cart, setCart] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [menuData, setMenuData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState('');
 
   const categories = ['All', ...new Set(menuData.map(item => item.category))];
 
@@ -72,23 +77,57 @@ const POS = () => {
   const tax = subtotal * 0.1;
   const total = subtotal + tax;
 
-  const generateBill = () => {
+  const generateBill = async () => {
     if (cart.length === 0) {
-      alert('Cart is empty!');
+      setError('Cart is empty!');
+      setTimeout(() => setError(''), 3000);
       return;
     }
     if (!customerName.trim()) {
-      alert('Please enter customer name!');
+      setError('Please enter customer name!');
+      setTimeout(() => setError(''), 3000);
       return;
     }
 
-    const orderId = `ORD${Date.now().toString().slice(-6)}`;
-    const billId = `BILL${Date.now().toString().slice(-6)}`;
-    
-    alert(`Bill Generated!\n\nOrder ID: ${orderId}\nBill ID: ${billId}\nCustomer: ${customerName}\nTotal: $${total.toFixed(2)}\n\nThank you for your order!`);
-    
-    setCart([]);
-    setCustomerName('');
+    try {
+      setSubmitting(true);
+      setError('');
+      setSuccess('');
+
+      // Create the order with correct field names for backend
+      const orderData = {
+        customerName: customerName.trim(),
+        phone: customerPhone.trim(),
+        empId: user?.id || 1, // Use logged-in employee ID or default to 1
+        items: cart.map(item => ({
+          itemId: item.id,
+          quantity: item.quantity
+        }))
+      };
+
+      const response = await apiService.createOrder(orderData);
+      
+      if (response.success) {
+        setSuccess(`Order created successfully! Order #${response.order.order_id}`);
+        
+        // Clear cart and customer info
+        setCart([]);
+        setCustomerName('');
+        setCustomerPhone('');
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(response.error || 'Failed to create order');
+        setTimeout(() => setError(''), 5000);
+      }
+    } catch (err) {
+      setError('Failed to create order: ' + err.message);
+      setTimeout(() => setError(''), 5000);
+      console.error('Error creating order:', err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Show loading state
@@ -185,17 +224,46 @@ const POS = () => {
                   <p className="text-xs text-neutral-500">{cart.length} items</p>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-neutral-700 mb-2">
-                  Customer Name
-                </label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Enter customer name"
-                  className="w-full px-3 py-2 rounded-lg border border-neutral-300 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
-                />
+
+              {/* Success Message */}
+              {success && (
+                <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <p className="text-emerald-700 text-sm font-medium">{success}</p>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm font-medium">{error}</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-2">
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Enter customer name"
+                    className="w-full px-3 py-2 rounded-lg border border-neutral-300 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-neutral-700 mb-2">
+                    Phone Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="Enter phone number"
+                    className="w-full px-3 py-2 rounded-lg border border-neutral-300 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                  />
+                </div>
               </div>
             </div>
 
@@ -269,10 +337,10 @@ const POS = () => {
               </div>
               <button
                 onClick={generateBill}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || submitting}
                 className="w-full bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold text-sm transition-colors"
               >
-                Generate Bill
+                {submitting ? 'Creating Order...' : 'Create Order'}
               </button>
             </div>
           </div>
